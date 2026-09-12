@@ -1,0 +1,3286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Brewhouse Simulator</title>
+<link rel="manifest" href="./manifest.webmanifest" />
+<meta name="theme-color" content="#101215" />
+<link rel="icon" href="./favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Brewhouse" />
+<style>
+  :root{
+    --bg:#101215; --panel:#191C21; --raised:#22262C; --line:#343A42;
+    --lineHi:#4A525C; --text:#E9E5DC; --dim:#8C949E; --copper:#C87137;
+    --led:#FFB020; --ok:#5DD48F; --warn:#E4574C;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    /* safe-area insets keep the UI clear of the notch/home bar when installed */
+    padding:calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+            calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+    background:var(--bg); color:var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size:14px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1280px;margin:0 auto;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;}
+  .pad{padding:16px;}
+  .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);}
+  .hint{font-size:11px;font-family:var(--mono);color:var(--dim);}
+  .lblrow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
+  .mono{font-family:var(--mono);}
+
+  input[type=number], input[type=text], select{
+    width:100%; padding:7px 8px; border-radius:5px; background:var(--raised);
+    border:1px solid var(--line); color:var(--text); font-size:13px;
+    font-family:var(--mono); outline:none;
+  }
+  select{appearance:none; font-family:inherit; padding-right:22px;
+    background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+    background-position:calc(100% - 12px) calc(50% + 1px), calc(100% - 7px) calc(50% + 1px);
+    background-size:5px 5px,5px 5px; background-repeat:no-repeat;}
+  input:focus,select:focus{border-color:var(--copper);}
+  input[type=range]{width:100%;height:6px;border-radius:3px;appearance:none;background:var(--raised);cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{appearance:none;width:15px;height:15px;border-radius:50%;background:var(--text);border:2px solid var(--bg);}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--text);border:2px solid var(--bg);}
+
+  button{font-family:inherit;font-size:13px;cursor:pointer;border-radius:5px;
+    background:var(--raised);border:1px solid var(--line);color:var(--text);padding:7px 12px;}
+  button:hover{border-color:var(--lineHi);}
+  .ghost{border-style:dashed;border-color:var(--lineHi);color:var(--dim);width:100%;padding:9px;margin-top:8px;}
+  .icobtn{background:none;border:none;color:var(--dim);padding:4px;font-size:15px;line-height:1;}
+  .icobtn:hover{color:var(--warn);}
+
+  .grid{display:grid;gap:12px;}
+  .readouts{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px;}
+  .ro{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 11px;}
+  .ro .k{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);margin-bottom:3px;}
+  .ro .v{font-family:var(--mono);font-size:25px;line-height:1;color:var(--led);}
+  .ro .v small{font-size:11px;color:var(--dim);margin-left:4px;}
+  .ro.sm .v{font-size:17px;}
+
+  .main{display:grid;grid-template-columns:7fr 5fr;gap:14px;align-items:start;}
+  .col{display:flex;flex-direction:column;gap:14px;}
+
+  .tabs{display:flex;overflow-x:auto;border-bottom:1px solid var(--line);}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;
+    padding:13px 15px;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.14em;white-space:nowrap;}
+  .tab.on{color:var(--led);border-bottom-color:var(--copper);background:var(--raised);}
+  .tp{display:none;} .tp.on{display:block;}
+
+  .row{display:grid;gap:8px;align-items:center;margin-bottom:8px;}
+  .frow{grid-template-columns:1fr 100px 78px 26px;}
+  .hrow{grid-template-columns:1fr 68px 68px 68px 108px 26px;}
+  .hhead{grid-template-columns:1fr 68px 68px 68px 108px 26px;}
+  .fhead{grid-template-columns:1fr 100px 78px 26px;}
+  .hhead,.fhead{font-size:10px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--dim);padding:0 2px;}
+  .mlrow,.mlhead{grid-template-columns:90px 1fr 96px 26px;}
+  .mlhead{font-size:10px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--dim);padding:0 2px;display:grid;gap:8px;align-items:center;}
+  .mlrow{font-family:var(--mono);font-size:13px;}
+  .mlrow .dv{font-family:var(--mono);}
+  .spec{font-family:var(--mono);font-size:11px;color:var(--dim);text-align:right;line-height:1.35;}
+
+  .note{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:11px 12px;color:var(--dim);font-size:13px;line-height:1.55;}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+  .g6{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+
+  .head{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 16px;margin-bottom:14px;}
+  #rname{background:none;border:none;font-family:inherit;font-size:19px;font-weight:600;padding:0;letter-spacing:-.01em;}
+  .flash{font-family:var(--mono);font-size:11px;color:var(--ok);background:var(--raised);padding:5px 9px;border-radius:5px;}
+
+  .bar{position:relative;height:9px;border-radius:4px;background:var(--raised);border:1px solid var(--line);}
+  .bar .zone{position:absolute;height:100%;border-radius:3px;background:var(--ok);opacity:.30;}
+  .bar .pin{position:absolute;top:-3px;width:3px;height:15px;border-radius:2px;background:var(--text);}
+  .srmstrip{display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--line);}
+  .srmstrip div{flex:1;}
+  .gristbar{display:flex;height:24px;border-radius:4px;overflow:hidden;border:1px solid var(--line);}
+  .glegend{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:5px;}
+  .sw{width:11px;height:11px;border-radius:2px;border:1px solid var(--line);flex:none;}
+  .grow{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chip{display:inline-block;padding:3px 8px;border-radius:5px;font-family:var(--mono);font-size:11px;
+    background:var(--raised);border:1px solid var(--line);margin:3px 4px 0 0;}
+  .foot{font-size:12px;line-height:1.6;color:var(--dim);padding:12px 16px;}
+
+  @media (max-width:1000px){
+    .main{grid-template-columns:1fr;}
+    .readouts{grid-template-columns:repeat(3,1fr);}
+  }
+  @media (max-width:620px){
+    .readouts{grid-template-columns:repeat(2,1fr);}
+    .g5,.g4,.g3,.g6{grid-template-columns:1fr 1fr;}
+    .hrow,.hhead{grid-template-columns:1fr 60px 60px 90px 26px;}
+    .frow,.fhead{grid-template-columns:1fr 76px 62px 26px;}
+    .hrow .aa,.hhead .aa{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){ animate{display:none;} }
+
+  /* ============ BREW SESSION ============ */
+  .modesw{display:flex;gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;}
+  .modesw button{border:none;border-radius:0;background:transparent;color:var(--dim);padding:7px 14px;font-size:12px;
+    text-transform:uppercase;letter-spacing:.1em;}
+  .modesw button.on{background:var(--copper);color:#14100C;font-weight:600;}
+  #sessionView,#breweryView,#carbView{display:none;}
+  body.session #sessionView{display:block;}
+  body.brewery #breweryView{display:block;}
+  body.carb #carbView{display:block;}
+  body.session #designView,body.brewery #designView,body.carb #designView{display:none;}
+  .brgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
+  @media (max-width:1000px){ .brgrid{grid-template-columns:1fr;} }
+
+  .sesshead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
+  .clock{font-family:var(--mono);font-size:30px;color:var(--led);line-height:1;}
+  .phasepill{font-size:11px;text-transform:uppercase;letter-spacing:.14em;padding:5px 11px;border-radius:20px;
+    background:var(--raised);border:1px solid var(--lineHi);color:var(--text);}
+  .spd{display:flex;gap:5px;}
+  .spd button{padding:6px 10px;font-family:var(--mono);font-size:12px;min-width:40px;}
+  .spd button.on{background:var(--copper);color:#14100C;border-color:var(--copper);font-weight:700;}
+
+  .sessgrid{display:grid;grid-template-columns:6fr 5fr;gap:14px;align-items:start;}
+  @media (max-width:1000px){ .sessgrid{grid-template-columns:1fr;} }
+
+  .led{width:9px;height:9px;border-radius:50%;background:#2A2F36;border:1px solid #000;display:inline-block;
+    vertical-align:middle;transition:background .15s, box-shadow .15s;}
+  .led.on{background:var(--ok);box-shadow:0 0 7px var(--ok);}
+  .led.hot{background:var(--warn);box-shadow:0 0 7px var(--warn);}
+  .led.amber{background:var(--led);box-shadow:0 0 7px var(--led);}
+  .ledrow{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--dim);
+    text-transform:uppercase;letter-spacing:.1em;padding:4px 0;}
+
+  .ctlblk{border-top:1px solid var(--line);padding-top:13px;margin-top:13px;}
+  .ctlhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
+  .tgl{padding:5px 13px;font-size:12px;font-family:var(--mono);}
+  .tgl.on{background:var(--ok);color:#0B1710;border-color:var(--ok);font-weight:700;}
+  .tgl.hot{background:var(--warn);color:#1A0B09;border-color:var(--warn);font-weight:700;}
+
+  .actbtn{width:100%;padding:11px;margin-top:8px;background:var(--copper);border-color:var(--copper);
+    color:#14100C;font-weight:600;font-size:13px;}
+  .actbtn:hover{filter:brightness(1.1);}
+  .actbtn:disabled{background:var(--raised);border-color:var(--line);color:var(--dim);cursor:not-allowed;filter:none;}
+  .actbtn.alt{background:var(--raised);border-color:var(--lineHi);color:var(--text);}
+
+  .loglist{max-height:190px;overflow-y:auto;font-family:var(--mono);font-size:11px;line-height:1.65;}
+  .loglist div{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+  .loglist .tm{color:var(--dim);margin-right:8px;}
+  .loglist .fault{color:var(--warn);}
+  .loglist .good{color:var(--ok);}
+
+  .hopbtn{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;
+    border-bottom:1px solid var(--line);font-size:12px;}
+  .hopbtn button{padding:4px 11px;font-size:11px;}
+  .hopbtn.done{opacity:.45;}
+
+  .flow{stroke-dasharray:5 4;animation:dash 1s linear infinite;}
+  @keyframes dash{to{stroke-dashoffset:-18;}}
+  .rotor{transform-box:fill-box;transform-origin:center;animation:spin 1.1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion:reduce){ .flow,.rotor{animation:none;} }
+
+  .cmp{display:grid;grid-template-columns:1fr auto auto auto;gap:0 12px;font-family:var(--mono);font-size:13px;}
+  .cmp>div{padding:7px 0;border-bottom:1px solid var(--line);}
+  .cmp .hd{font-family:inherit;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="panel head">
+    <span style="color:var(--copper);font-size:20px;">🍺</span>
+    <div style="flex:1;min-width:160px;">
+      <input id="rname" type="text" value="River Bend Amber" />
+      <div class="lbl">Brewhouse Simulator</div>
+    </div>
+    <div style="width:230px;"><select id="style"></select></div>
+    <div class="modesw"><button id="mDesign" class="on">Recipe</button><button id="mBrew">Brew Day</button><button id="mShop">Brewery</button><button id="mCarb">CO₂</button></div>
+    <select id="presets" style="width:auto;"><option value="">Presets…</option></select>
+    <button id="btnSave">Save</button>
+    <select id="btnOpen" style="width:auto;"><option value="">Open…</option></select>
+    <button id="btnToFile" title="Save this recipe as a .json file you keep">Save to file</button>
+    <button id="btnFromFile" title="Open a .json recipe file">Open file</button>
+    <button id="btnInstall" style="display:none;border-color:var(--copper);color:var(--led);">Install</button>
+    <button id="btnReset" title="Reset">↺</button>
+    <input id="fileIn" type="file" accept=".json,application/json" style="display:none;" />
+    <span id="flash"></span>
+  </div>
+
+  <div id="designView">
+
+  <!-- READOUTS -->
+  <div class="readouts">
+    <div class="ro"><div class="k">OG</div><div class="v" id="ro-og">—</div></div>
+    <div class="ro"><div class="k">FG</div><div class="v" id="ro-fg">—</div></div>
+    <div class="ro"><div class="k">ABV</div><div class="v" id="ro-abv">—</div></div>
+    <div class="ro"><div class="k">IBU</div><div class="v" id="ro-ibu">—</div></div>
+    <div class="ro"><div class="k">Color</div><div class="v" id="ro-srm">—</div></div>
+    <div class="ro"><div class="k">BU:GU</div><div class="v" id="ro-bugu">—</div></div>
+  </div>
+
+  <div class="main">
+    <!-- ============ LEFT ============ -->
+    <div class="col">
+
+      <div class="panel pad">
+        <div class="g5">
+          <div><div class="lblrow"><span class="lbl">Batch size</span><span class="hint">gal</span></div>
+            <input type="number" step="0.25" data-key="batch" /></div>
+          <div><div class="lblrow"><span class="lbl">Efficiency</span><span class="hint">%</span></div>
+            <input type="number" step="1" data-key="efficiency" /></div>
+          <div><div class="lblrow"><span class="lbl">Boil time</span><span class="hint">min</span></div>
+            <input type="number" step="5" data-key="boilTime" /></div>
+          <div><div class="lblrow"><span class="lbl">Boil-off</span><span class="hint">gal/hr</span></div>
+            <input type="number" step="0.1" data-key="boilOff" /></div>
+          <div><div class="lblrow"><span class="lbl">Mash temp</span><span class="hint">°F</span></div>
+            <input type="number" step="1" min="140" max="170" data-key="mashTemp" /></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="tabs">
+          <button class="tab on" data-tab="grain">🌾 Grain Bill</button>
+          <button class="tab" data-tab="hops">🌿 Hops</button>
+          <button class="tab" data-tab="yeast">🧪 Yeast &amp; Ferment</button>
+          <button class="tab" data-tab="water">💧 Water</button>
+          <button class="tab" data-tab="mash">🌡 Mash &amp; Kettle</button>
+        </div>
+
+        <!-- GRAIN -->
+        <div class="pad tp on" id="tp-grain">
+          <div class="row fhead">
+            <div>Fermentable</div><div>Weight (lb)</div><div>Color · yield</div><div></div>
+          </div>
+          <div id="fermRows"></div>
+          <button class="ghost" id="addFerm">+ Add fermentable</button>
+          <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px;">
+            <div class="lblrow"><span class="lbl">Grist breakdown</span><span class="hint" id="gristTotal"></span></div>
+            <div class="gristbar" id="gristBar"></div>
+            <div id="gristLegend" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <!-- HOPS -->
+        <div class="pad tp" id="tp-hops">
+          <div class="row hhead">
+            <div>Variety</div><div class="aa">AA%</div><div>Weight (oz)</div><div>Time (min)</div><div>Use</div><div></div>
+          </div>
+          <div id="hopRows"></div>
+          <button class="ghost" id="addHop">+ Add hop addition</button>
+          <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px;">
+            <div class="lblrow"><span class="lbl">Hop schedule</span><span class="hint" id="hopHint"></span></div>
+            <div id="hopChart"></div>
+            <div style="margin-top:14px;">
+              <div class="lblrow"><span class="lbl">Whirlpool temperature</span><span class="hint" id="wpHint"></span></div>
+              <input type="range" min="140" max="212" step="1" data-key="whirlpoolTemp" />
+            </div>
+          </div>
+        </div>
+
+        <!-- YEAST -->
+        <div class="pad tp" id="tp-yeast">
+          <div class="lbl" style="margin-bottom:5px;">Strain</div>
+          <select id="yeastSel"></select>
+          <div id="yeastNote" style="margin-top:8px;color:var(--dim);font-size:13px;"></div>
+          <div style="margin-top:18px;">
+            <div class="lblrow"><span class="lbl">Fermentation temperature</span><span class="hint" id="ftHint"></span></div>
+            <input type="range" min="40" max="95" step="1" data-key="fermTemp" />
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:5px;color:var(--dim);">
+              <span class="mono">40°F</span><span id="ftStatus"></span><span class="mono">95°F</span>
+            </div>
+          </div>
+          <div class="g2" style="margin-top:18px;">
+            <div class="ro sm"><div class="k">Effective attenuation</div><div class="v" id="ro-att">—</div></div>
+            <div class="ro sm"><div class="k">Mash adjustment</div><div class="v" id="ro-madj">—</div></div>
+          </div>
+          <div class="note" style="margin-top:14px;" id="yeastExplain"></div>
+        </div>
+
+        <!-- WATER -->
+        <div class="pad tp" id="tp-water">
+          <div class="lbl" style="margin-bottom:5px;">Source profile</div>
+          <select id="waterSel"></select>
+          <div class="g6" style="margin-top:16px;" id="waterSliders"></div>
+          <div style="margin-top:18px;">
+            <div class="lblrow"><span class="lbl">Sulfate : chloride balance</span><span class="hint" id="scHint"></span></div>
+            <div style="position:relative;height:14px;border-radius:5px;border:1px solid var(--line);
+                 background:linear-gradient(to right,var(--copper),var(--raised),var(--led));">
+              <div class="pin" id="scPin" style="position:absolute;top:-3px;width:4px;height:19px;background:var(--text);border-radius:2px;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:5px;color:var(--dim);">
+              <span>Malty / round</span><span>Balanced</span><span>Crisp / hoppy</span>
+            </div>
+          </div>
+          <div class="g3" style="margin-top:18px;">
+            <div class="ro sm"><div class="k">Residual alkalinity</div><div class="v" id="ro-ra">—</div></div>
+            <div class="ro sm"><div class="k">Est. mash pH</div><div class="v" id="ro-ph">—</div></div>
+            <div class="ro sm"><div class="k">Target</div><div class="v" style="color:var(--dim);">5.2–5.6</div></div>
+          </div>
+          <div class="note" style="margin-top:14px;">
+            pH here is a rough estimate from grist color, acid malt, and residual alkalinity — not a substitute for a meter.
+            Dark grain pulls pH down; bicarbonate pushes it up, which is why dark styles tolerate alkaline water and pale ones don't.
+          </div>
+
+          <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line);">
+            <div class="lblrow" style="margin-bottom:10px;">
+              <span class="lbl">Salt additions — building from RO / distilled</span>
+              <span class="hint" id="saltVolHint"></span>
+            </div>
+            <div id="saltTable"></div>
+            <div class="note" style="margin-top:12px;" id="saltNote"></div>
+          </div>
+        </div>
+
+        <!-- MASH -->
+        <div class="pad tp" id="tp-mash">
+          <div class="lblrow"><span class="lbl">Saccharification rest</span><span class="hint" id="mtHint"></span></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="range" min="144" max="162" step="1" data-key="mashTemp" style="flex:1;" />
+            <input type="number" step="1" min="140" max="170" data-key="mashTemp"
+                   style="width:76px;flex:none;text-align:center;" />
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:5px;color:var(--dim);">
+            <span>144° thin &amp; dry</span><span>152° balanced</span><span>162° thick &amp; sweet</span>
+          </div>
+          <div id="mashStatus" style="margin-top:9px;font-size:13px;"></div>
+
+          <div class="g4" style="margin-top:18px;">
+            <div><div class="lblrow"><span class="lbl">Mash time</span><span class="hint">min</span></div>
+              <input type="number" step="5" data-key="mashTime" /></div>
+            <div><div class="lblrow"><span class="lbl">Thickness</span><span class="hint">qt/lb</span></div>
+              <input type="number" step="0.05" data-key="mashThickness" /></div>
+            <div><div class="lblrow"><span class="lbl">Grain temp</span><span class="hint">°F</span></div>
+              <input type="number" step="1" data-key="grainTemp" /></div>
+            <div><div class="lblrow"><span class="lbl">Trub loss</span><span class="hint">gal</span></div>
+              <input type="number" step="0.05" data-key="trubLoss" /></div>
+          </div>
+
+          <div class="g3" style="margin-top:16px;">
+            <div class="ro sm"><div class="k">Strike water</div><div class="v" id="ro-strikeW">—</div></div>
+            <div class="ro sm"><div class="k">Strike temp</div><div class="v" id="ro-strikeT">—</div></div>
+            <div class="ro sm"><div class="k">Sparge water</div><div class="v" id="ro-sparge">—</div></div>
+            <div class="ro sm"><div class="k">Grain absorption</div><div class="v" id="ro-absorb">—</div></div>
+            <div class="ro sm"><div class="k">Pre-boil volume</div><div class="v" id="ro-boilvol">—</div></div>
+            <div class="ro sm"><div class="k">Pre-boil gravity</div><div class="v" id="ro-pbg">—</div></div>
+          </div>
+          <div class="note" style="margin-top:14px;" id="mashExplain"></div>
+
+          <div class="lblrow" style="margin-top:22px;">
+            <span class="lbl">Mash temp log</span>
+            <span class="hint" id="mlHint">log readings during the rest</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+            <input type="number" step="0.1" id="mlTemp" placeholder="°F"
+                   style="width:92px;flex:none;text-align:center;" />
+            <input type="number" step="1" min="0" id="mlMin" placeholder="min"
+                   style="width:78px;flex:none;text-align:center;" />
+            <button class="ghost" id="mlAdd">+ Log reading</button>
+            <button class="ghost" id="mlClear">Clear</button>
+          </div>
+          <div class="row mlhead" style="margin-bottom:6px;">
+            <span>Elapsed</span><span>Temp °F</span><span>vs target</span><span></span>
+          </div>
+          <div id="mlRows"></div>
+          <div class="g4" style="margin-top:12px;">
+            <div class="ro sm"><div class="k">Readings</div><div class="v" id="ro-mlN">—</div></div>
+            <div class="ro sm"><div class="k">Average</div><div class="v" id="ro-mlAvg">—</div></div>
+            <div class="ro sm"><div class="k">Low / high</div><div class="v" id="ro-mlRange">—</div></div>
+            <div class="ro sm"><div class="k">Drift</div><div class="v" id="ro-mlDrift">—</div></div>
+          </div>
+          <button class="ghost" id="mlApply" style="margin-top:10px;">↑ Use average as mash temp</button>
+          <div class="note" style="margin-top:12px;" id="mlExplain"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RIGHT ============ -->
+    <div class="col">
+      <div class="panel pad">
+        <div style="display:flex;gap:16px;">
+          <div style="width:112px;flex:none;" id="glass"></div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;">
+            <div>
+              <div class="lblrow"><span class="lbl">Color</span><span class="hint" id="srmHint"></span></div>
+              <div class="srmstrip" id="srmStrip"></div>
+              <div style="position:relative;height:11px;"><div id="srmPin" style="position:absolute;top:0;">
+                <svg width="10" height="8"><path d="M5 0 L10 8 L0 8 Z" fill="#E9E5DC"/></svg></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);" class="mono">
+                <span>1</span><span>10</span><span>20</span><span>30</span><span>40+</span></div>
+            </div>
+            <div class="g2">
+              <div class="ro sm"><div class="k">Calories</div><div class="v" id="ro-cal">—</div></div>
+              <div class="ro sm"><div class="k">Attenuation</div><div class="v" id="ro-realatt">—</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel pad">
+        <div class="lblrow"><span class="lbl">Flavor profile</span><span class="hint">0 – 10 scale</span></div>
+        <div id="radar"></div>
+      </div>
+
+      <div class="panel pad">
+        <div class="lbl" style="margin-bottom:6px;">Predicted character</div>
+        <p id="tasting" style="margin:0;font-size:13px;line-height:1.65;"></p>
+      </div>
+
+      <div class="panel pad">
+        <div class="lblrow"><span class="lbl" id="styleTitle">Style check</span><span class="hint" id="styleScore"></span></div>
+        <div id="styleBars"></div>
+      </div>
+
+      <div class="panel foot">
+        <span style="color:var(--text);">Under the hood:</span> gravity from PPG × efficiency, color by Morey,
+        bitterness by Tinseth (boil-gravity corrected), attenuation shifted by mash temperature, and flavor axes
+        derived from grist composition, hop timing, yeast character, and sulfate/chloride balance.
+        Recipes save to this browser's local storage.
+      </div>
+    </div>
+  </div>
+  </div><!-- /designView -->
+
+  <!-- ============ BREW SESSION ============ -->
+  <div id="sessionView">
+    <div class="panel pad" style="margin-bottom:14px;">
+      <div class="sesshead">
+        <div>
+          <div class="lbl" style="margin-bottom:4px;">Elapsed</div>
+          <div class="clock" id="sClock">00:00</div>
+        </div>
+        <div class="phasepill" id="sPhase">Setup</div>
+        <div style="flex:1;"></div>
+        <div class="spd" id="sSpeed">
+          <button data-spd="0">❙❙</button><button data-spd="1" class="on">1×</button>
+          <button data-spd="10">10×</button><button data-spd="60">60×</button>
+          <button data-spd="600">600×</button>
+        </div>
+        <button id="sSkip" title="Jump to the end of this step">⏭ Skip step</button>
+        <button id="sRestart" title="Start over">↺ Restart</button>
+      </div>
+      <div class="hint" id="sHint" style="line-height:1.6;"></div>
+    </div>
+
+    <div class="sessgrid">
+      <!-- RIG -->
+      <div class="col">
+        <div class="panel pad">
+          <div class="lblrow"><span class="lbl">HERMS rig</span><span class="hint" id="sRigHint"></span></div>
+          <div id="rigWrap" style="margin-top:8px;"></div>
+        </div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Process log</div>
+          <div class="loglist" id="sLog"></div>
+        </div>
+      </div>
+
+      <!-- CONTROLS -->
+      <div class="col">
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:9px;">Step</div>
+          <div id="sStepBody" style="font-size:13px;line-height:1.65;color:var(--dim);"></div>
+          <div id="sActions"></div>
+        </div>
+
+        <div class="panel pad">
+          <div class="lbl">Control cabinet</div>
+
+          <div class="ctlblk">
+            <div class="ctlhead">
+              <span style="font-size:13px;">HLT element <span class="led" id="ledHlt"></span></span>
+              <button class="tgl" id="tHlt">OFF</button>
+            </div>
+            <div class="lblrow"><span class="lbl">Setpoint</span><span class="hint" id="hHltSp"></span></div>
+            <input type="range" id="rHltSp" min="70" max="212" step="1" />
+          </div>
+
+          <div class="ctlblk">
+            <div class="ctlhead">
+              <span style="font-size:13px;">Recirc pump <span class="led" id="ledPump"></span></span>
+              <button class="tgl" id="tPump">OFF</button>
+            </div>
+            <div class="lblrow"><span class="lbl">Flow</span><span class="hint" id="hFlow"></span></div>
+            <input type="range" id="rFlow" min="0.1" max="3" step="0.1" />
+            <div class="hint" id="bedHint" style="margin-top:6px;"></div>
+          </div>
+
+          <div class="ctlblk">
+            <div class="ctlhead">
+              <span style="font-size:13px;">Kettle element <span class="led" id="ledBk"></span></span>
+              <button class="tgl" id="tBk">OFF</button>
+            </div>
+            <div class="lblrow"><span class="lbl">Boil vigor</span><span class="hint" id="hVigor"></span></div>
+            <input type="range" id="rVigor" min="0.15" max="1" step="0.05" />
+          </div>
+
+          <div class="ctlblk" id="hopBlk" style="display:none;">
+            <div class="lbl" style="margin-bottom:8px;">Hop additions</div>
+            <div id="sHops"></div>
+          </div>
+        </div>
+
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Instruments</div>
+          <div class="g3">
+            <div class="ro sm"><div class="k">Conversion</div><div class="v" id="iConv">—</div></div>
+            <div class="ro sm"><div class="k">Enzymes</div><div class="v" id="iEnz">—</div></div>
+            <div class="ro sm"><div class="k">Kettle vol</div><div class="v" id="iVol">—</div></div>
+          </div>
+          <div class="g3" style="margin-top:8px;">
+            <div class="ro sm"><div class="k">Conv. temp</div><div class="v" id="iCT">—</div></div>
+            <div class="ro sm"><div class="k">Boil time</div><div class="v" id="iBoil">—</div></div>
+            <div class="ro sm"><div class="k">Boil point</div><div class="v" id="iBp">—</div></div>
+          </div>
+          <div class="hint" style="margin-top:10px;line-height:1.6;" id="iNote"></div>
+        </div>
+
+        <div class="panel pad" id="sResult" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BREWERY ============ -->
+  <div id="breweryView">
+    <div class="panel pad" style="margin-bottom:14px;">
+      <div class="lblrow"><span class="lbl">Scale</span><span class="hint" id="brScaleHead"></span></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <div style="flex:1;min-width:220px;"><select id="brScale"></select></div>
+        <button id="brPrint" title="Print the brew-day sheet">🖨 Print sheet</button>
+        <button id="brSheet" title="Download the brew-day sheet as a file">↓ Brew sheet</button>
+      </div>
+      <div id="brCustomWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+        <div class="lblrow"><span class="lbl">Custom batch</span><span class="hint" id="brCustHead"></span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+          <div style="flex:1;min-width:120px;">
+            <div class="hint" style="margin-bottom:3px;">Into fermenter (gal)</div>
+            <input type="number" step="0.25" min="0.5" id="brCgal" />
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div class="hint" style="margin-bottom:3px;">Efficiency (%)</div>
+            <input type="number" step="1" min="30" max="95" id="brCeff" />
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div class="hint" style="margin-bottom:3px;">Boil-off (%/hr)</div>
+            <input type="number" step="0.5" min="0" max="25" id="brCboil" />
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div class="hint" style="margin-bottom:3px;">Kettle loss (gal)</div>
+            <input type="number" step="0.05" min="0" id="brCloss" />
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div class="hint" style="margin-bottom:3px;">Packaging loss (%)</div>
+            <input type="number" step="0.5" min="0" max="20" id="brCpkg" />
+          </div>
+        </div>
+        <div class="hint" style="margin-top:9px;line-height:1.6;">
+          Set the volume you actually want in the fermenter and the grist, hops, water, salts and
+          pitch all rescale to it. Efficiency is the one number worth measuring on your own system —
+          everything downstream of it is arithmetic.
+        </div>
+      </div>
+      <div class="hint" style="margin-top:10px;line-height:1.6;">
+        Grist is rescaled for the efficiency of the larger system, not just the volume — a bigger
+        brewhouse extracts more from the same malt, so the bill is not a straight multiple.
+      </div>
+    </div>
+
+    <div class="brgrid">
+      <div class="col">
+        <div class="panel pad"><div class="lbl" style="margin-bottom:8px;">Scaled grist</div><div id="brGrist"></div></div>
+        <div class="panel pad"><div class="lbl" style="margin-bottom:8px;">Scaled hops</div><div id="brHops"></div></div>
+        <div class="panel pad"><div class="lbl" style="margin-bottom:8px;">Water</div><div id="brWater"></div></div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Yeast pitch</div><div id="brPitch"></div>
+        </div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Fermentation schedule</div><div id="brSched"></div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Ingredient cost</div>
+          <div id="brCost"></div>
+          <div style="margin-top:12px;" id="brCostUnit"></div>
+          <div class="ctlblk">
+            <div class="g3">
+              <div><div class="lbl">Yeast $/pack</div><input type="number" id="brYeastCost" step="0.5" /></div>
+              <div><div class="lbl">Misc $/gal</div><input type="number" id="brMisc" step="0.05" /></div>
+              <div><div class="lbl">Overhead $</div><input type="number" id="brOverhead" step="10" /></div>
+            </div>
+            <div class="hint" style="margin-top:8px;">Per-ingredient prices default by malt type. Override any of them below.</div>
+            <div id="brPriceRows" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Packaging yield</div><div id="brYield"></div>
+        </div>
+
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Margin</div>
+          <div style="display:flex;gap:10px;align-items:end;">
+            <div style="flex:2;"><div class="lbl">Package</div><select id="brPkg"></select></div>
+            <div style="flex:1;"><div class="lbl">Your price</div><input type="number" id="brPrice" step="1" /></div>
+          </div>
+          <div style="margin-top:12px;" id="brMargin"></div>
+        </div>
+
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Carbonation</div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;"><div class="lbl">Volumes CO₂</div><input type="number" id="brCo2" step="0.05" /></div>
+            <div style="flex:1;"><div class="lbl">Serving temp °F</div><input type="number" id="brServe" step="1" /></div>
+          </div>
+          <div style="margin-top:12px;" id="brCarb"></div>
+        </div>
+
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Brew day tools</div>
+          <div class="ctlblk" style="border-top:none;padding-top:0;margin-top:0;">
+            <div class="lbl">Refractometer during fermentation</div>
+            <div style="display:flex;gap:10px;margin-top:5px;">
+              <input type="number" id="brROB" step="0.1" placeholder="original °Bx" />
+              <input type="number" id="brRAB" step="0.1" placeholder="current °Bx" />
+            </div>
+            <div class="hint" style="margin-top:7px;" id="brRefracOut"></div>
+          </div>
+          <div class="ctlblk">
+            <div class="lbl">Hydrometer temperature correction</div>
+            <div style="display:flex;gap:10px;margin-top:5px;">
+              <input type="number" id="brHSG" step="0.001" placeholder="reading e.g. 1.042" />
+              <input type="number" id="brHT" step="1" placeholder="sample °F" />
+            </div>
+            <div class="hint" style="margin-top:7px;" id="brHydOut"></div>
+          </div>
+          <div class="ctlblk">
+            <div class="lbl">Actual efficiency from measured gravity</div>
+            <div style="display:flex;gap:10px;margin-top:5px;">
+              <input type="number" id="brMP" step="0.001" placeholder="pre-boil SG" />
+              <input type="number" id="brMV" step="0.1" placeholder="pre-boil gal" />
+            </div>
+            <div class="hint" style="margin-top:7px;" id="brEffOut"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CARBONATION ============ -->
+  <div id="carbView">
+    <div class="panel pad" style="margin-bottom:14px;">
+      <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;">
+        <div style="min-width:190px;">
+          <div class="lbl" style="margin-bottom:4px;">Regulator setting</div>
+          <div style="font-family:var(--mono);font-size:44px;color:var(--led);line-height:1;" id="cbBig">—</div>
+          <div class="hint" style="margin-top:6px;" id="cbSub"></div>
+        </div>
+        <div style="flex:1;min-width:290px;display:flex;gap:10px;">
+          <div style="flex:1;"><div class="lbl">Volumes CO₂</div><input type="number" id="cbVols" step="0.05"></div>
+          <div style="flex:1;"><div class="lbl">Keg temp °F</div><input type="number" id="cbTemp" step="1"></div>
+          <div style="flex:1;"><div class="lbl">Altitude ft</div><input type="number" id="cbAlt" step="50"></div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:14px;line-height:1.65;" id="cbAltNote"></div>
+    </div>
+
+    <div class="panel pad" style="margin-bottom:14px;">
+      <div class="lbl" style="margin-bottom:10px;">Carbonation chart</div>
+      <div style="overflow-x:auto;" id="cbChart"></div>
+      <div class="hint" style="margin-top:10px;" id="cbChartNote"></div>
+    </div>
+
+    <div class="brgrid">
+      <div class="col">
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Method</div><div id="cbMethods"></div>
+        </div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Target by style</div><div id="cbStyles"></div>
+        </div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:8px;">Temperature drift</div>
+          <div class="hint" style="line-height:1.65;" id="cbDrift"></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Draft line balancing</div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:2;"><div class="lbl">Line</div><select id="cbLine"></select></div>
+            <div style="flex:1;"><div class="lbl">Rise ft</div><input type="number" id="cbRise" step="0.5"></div>
+          </div>
+          <div style="margin-top:12px;" id="cbLineOut"></div>
+        </div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">CO₂ consumption</div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;"><div class="lbl">Keg gal</div><input type="number" id="cbKegGal" step="0.5"></div>
+            <div style="flex:1;"><div class="lbl">Cylinder lb</div><input type="number" id="cbTank" step="1"></div>
+          </div>
+          <div style="margin-top:12px;" id="cbTankOut"></div>
+        </div>
+        <div class="panel pad">
+          <div class="lbl" style="margin-bottom:10px;">Priming sugar (bottling)</div>
+          <select id="cbSugar"></select>
+          <div style="margin-top:12px;" id="cbPrime"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ================= DATA ================= */
+const FERMENTABLES=[
+/* ---- BASE ---- */
+{n:'Pilsner Malt',ppg:37,l:1.6,g:'Base'},{n:'Bohemian Pilsner Malt',ppg:37,l:2.2,g:'Base'},
+{n:'2-Row Pale Malt',ppg:37,l:1.8,g:'Base'},{n:'6-Row Pale Malt',ppg:35,l:2,g:'Base'},
+{n:'Pale Ale Malt',ppg:37,l:3,g:'Base'},{n:'Maris Otter',ppg:38,l:3.0,g:'Base'},
+{n:'Golden Promise',ppg:37,l:2.5,g:'Base'},{n:'Optic Pale Malt',ppg:37,l:2.5,g:'Base'},
+{n:'Chevallier Heritage Malt',ppg:36,l:3,g:'Base'},{n:'Mild Ale Malt',ppg:36,l:3.5,g:'Base'},
+{n:'Vienna Malt',ppg:36,l:3.5,g:'Base'},
+{n:'Munich Malt (Light)',ppg:37,l:9,g:'Base'},{n:'Munich Malt (Dark)',ppg:36,l:20,g:'Base'},
+{n:'Wheat Malt',ppg:38,l:2,g:'Base'},{n:'Dark Wheat Malt',ppg:37,l:8,g:'Base'},
+{n:'Red Wheat Malt',ppg:37,l:3,g:'Base'},{n:'Rye Malt',ppg:36,l:3.5,g:'Base'},
+{n:'Oat Malt',ppg:33,l:2,g:'Base'},{n:'Spelt Malt',ppg:36,l:2,g:'Base'},
+{n:'Triticale Malt',ppg:36,l:3,g:'Base'},{n:'Smoked / Rauch Malt',ppg:37,l:3,g:'Base'},
+/* ---- ADJUNCT ---- */
+{n:'Flaked Wheat',ppg:34,l:2,g:'Adjunct'},{n:'Flaked Oats',ppg:33,l:2.2,g:'Adjunct'},
+{n:'Flaked Barley',ppg:32,l:1.5,g:'Adjunct'},{n:'Flaked Rye',ppg:36,l:3,g:'Adjunct'},
+{n:'Flaked Corn',ppg:39,l:0.5,g:'Adjunct'},{n:'Flaked Rice',ppg:38,l:0.5,g:'Adjunct'},
+{n:'Torrified Wheat',ppg:36,l:2,g:'Adjunct'},{n:'Raw Wheat (unmalted)',ppg:36,l:2,g:'Adjunct'},
+{n:'Raw Barley (unmalted)',ppg:30,l:2,g:'Adjunct'},{n:'Corn Grits (cereal mash)',ppg:37,l:0.5,g:'Adjunct'},
+{n:'Brewers Rice (cereal mash)',ppg:38,l:0.5,g:'Adjunct'},{n:'Rice Hulls (no extract)',ppg:0,l:0,g:'Adjunct'},
+/* ---- SPECIALTY / KILNED ---- */
+{n:'CaraPils / Dextrine',ppg:33,l:2,g:'Specialty'},{n:'Chit Malt',ppg:30,l:1.5,g:'Specialty'},
+{n:'Acidulated Malt',ppg:27,l:3,g:'Specialty'},{n:'Melanoidin Malt',ppg:37,l:25,g:'Specialty'},
+{n:'Aromatic Malt',ppg:35,l:20,g:'Specialty'},{n:'Abbey Malt',ppg:33,l:17,g:'Specialty'},
+{n:'Biscuit Malt',ppg:35,l:25,g:'Specialty'},{n:'Victory Malt',ppg:34,l:28,g:'Specialty'},
+{n:'Amber Malt',ppg:33,l:22,g:'Specialty'},{n:'Brown Malt',ppg:32,l:65,g:'Specialty'},
+{n:'Special Roast',ppg:33,l:50,g:'Specialty'},{n:'Kiln Coffee Malt',ppg:33,l:30,g:'Specialty'},
+{n:'Toasted Pale Malt',ppg:34,l:25,g:'Specialty'},
+/* ---- CRYSTAL / CARAMEL ---- */
+{n:'Crystal 10L',ppg:35,l:10,g:'Crystal'},{n:'Crystal 20L',ppg:35,l:20,g:'Crystal'},
+{n:'Crystal 30L',ppg:35,l:30,g:'Crystal'},{n:'Crystal 40L',ppg:34,l:40,g:'Crystal'},
+{n:'Crystal 60L',ppg:34,l:60,g:'Crystal'},{n:'Crystal 80L',ppg:33,l:80,g:'Crystal'},
+{n:'Crystal 90L',ppg:33,l:90,g:'Crystal'},{n:'Crystal 120L',ppg:33,l:120,g:'Crystal'},
+{n:'Crystal 150L',ppg:32,l:150,g:'Crystal'},{n:'Caramalt / Carastan',ppg:34,l:30,g:'Crystal'},
+{n:'CaraVienne',ppg:34,l:20,g:'Crystal'},{n:'CaraRed',ppg:35,l:20,g:'Crystal'},
+{n:'CaraAmber 30L',ppg:34,l:30,g:'Crystal'},{n:'CaraMunich I',ppg:34,l:35,g:'Crystal'},
+{n:'CaraMunich II',ppg:34,l:45,g:'Crystal'},{n:'CaraMunich III',ppg:34,l:60,g:'Crystal'},
+{n:'Cara Bohemian',ppg:33,l:75,g:'Crystal'},{n:'CaraAroma',ppg:33,l:130,g:'Crystal'},
+{n:'Extra Special Malt',ppg:33,l:130,g:'Crystal'},{n:'Double Roasted Crystal',ppg:32,l:130,g:'Crystal'},
+{n:'Special B',ppg:30,l:180,g:'Crystal'},{n:'Caramel Wheat',ppg:34,l:46,g:'Crystal'},
+{n:'Crystal Rye 70L',ppg:33,l:70,g:'Crystal'},{n:'Honey Malt',ppg:37,l:25,g:'Crystal'},
+{n:'Brumalt',ppg:34,l:20,g:'Crystal'},{n:'Golden Naked Oats',ppg:33,l:10,g:'Crystal'},
+/* ---- ROAST ---- */
+{n:'Pale Chocolate',ppg:32,l:200,g:'Roast'},{n:'Chocolate Malt',ppg:28,l:350,g:'Roast'},
+{n:'Dark Chocolate Malt',ppg:28,l:450,g:'Roast'},{n:'Black Patent',ppg:25,l:500,g:'Roast'},
+{n:'Carafa I',ppg:32,l:300,g:'Roast'},{n:'Carafa II',ppg:32,l:415,g:'Roast'},
+{n:'Carafa III',ppg:32,l:525,g:'Roast'},{n:'Carafa Special I',ppg:32,l:300,g:'Roast'},
+{n:'Carafa Special II',ppg:32,l:430,g:'Roast'},{n:'Carafa Special III',ppg:32,l:525,g:'Roast'},
+{n:'Roasted Barley',ppg:25,l:300,g:'Roast'},{n:'Black Barley (unmalted)',ppg:25,l:500,g:'Roast'},
+{n:'Midnight Wheat',ppg:25,l:550,g:'Roast'},{n:'Blackprinz',ppg:25,l:500,g:'Roast'},
+{n:'Debittered Black Malt',ppg:25,l:500,g:'Roast'},{n:'Chocolate Wheat',ppg:30,l:400,g:'Roast'},
+{n:'Chocolate Rye',ppg:30,l:250,g:'Roast'},{n:'Roasted Wheat',ppg:28,l:400,g:'Roast'},
+/* ---- SMOKED ---- */
+{n:'Beechwood Smoked Malt',ppg:37,l:3,g:'Smoked'},{n:'Peated Malt',ppg:37,l:2,g:'Smoked'},
+{n:'Cherrywood Smoked Malt',ppg:37,l:5,g:'Smoked'},{n:'Mesquite Smoked Malt',ppg:37,l:5,g:'Smoked'},
+{n:'Alderwood Smoked Malt',ppg:37,l:5,g:'Smoked'},{n:'Hickory Smoked Malt',ppg:37,l:5,g:'Smoked'},
+{n:'Oak-Smoked Wheat Malt',ppg:37,l:3,g:'Smoked'},
+/* ---- GLUTEN-FREE ---- */
+{n:'Millet Malt',ppg:32,l:2,g:'Gluten-Free'},{n:'Buckwheat Malt',ppg:30,l:3,g:'Gluten-Free'},
+{n:'Quinoa Malt',ppg:30,l:3,g:'Gluten-Free'},{n:'Amaranth',ppg:28,l:4,g:'Gluten-Free'},
+{n:'Teff',ppg:30,l:10,g:'Gluten-Free'},{n:'Corn Malt',ppg:35,l:2,g:'Gluten-Free'},
+/* ---- SUGAR ---- */
+{n:'Corn Sugar (Dextrose)',ppg:46,l:0.5,g:'Sugar',sugar:true},
+{n:'Table Sugar (Sucrose)',ppg:46,l:0,g:'Sugar',sugar:true},
+{n:'Honey',ppg:35,l:1,g:'Sugar',sugar:true},
+{n:'Belgian Candi Sugar (clear)',ppg:46,l:1,g:'Sugar',sugar:true},
+{n:'Belgian Candi Syrup D-45',ppg:32,l:45,g:'Sugar',sugar:true},
+{n:'Belgian Candi Syrup D-2',ppg:32,l:160,g:'Sugar',sugar:true},
+{n:'Molasses',ppg:36,l:80,g:'Sugar',sugar:true},
+{n:'Maple Syrup',ppg:30,l:35,g:'Sugar',sugar:true},
+{n:'Sorghum Syrup (GF)',ppg:38,l:2,g:'Sugar',sugar:true},
+/* ---- EXTRACT ---- */
+{n:'DME — Light',ppg:44,l:4,g:'Extract'},{n:'DME — Amber',ppg:44,l:10,g:'Extract'},
+{n:'DME — Wheat',ppg:44,l:4,g:'Extract'},{n:'LME — Light',ppg:36,l:4,g:'Extract'},
+{n:'LME — Amber',ppg:36,l:10,g:'Extract'},{n:'LME — Munich',ppg:36,l:9,g:'Extract'}];
+
+const HOPS=[
+/* ---- AMERICAN AROMA / DUAL ---- */
+{n:'Cascade',a:5.5,d:['grapefruit','floral'],g:'American — Aroma'},
+{n:'Centennial',a:10,d:['lemon','floral'],g:'American — Aroma'},
+{n:'Chinook',a:13,d:['pine','grapefruit'],g:'American — Aroma'},
+{n:'Columbus / CTZ',a:15,d:['dank','pungent'],g:'American — Aroma'},
+{n:'Simcoe',a:13,d:['pine','passionfruit'],g:'American — Aroma'},
+{n:'Citra',a:12,d:['mango','tangerine'],g:'American — Aroma'},
+{n:'Mosaic',a:12.5,d:['blueberry','tropical'],g:'American — Aroma'},
+{n:'Amarillo',a:9,d:['orange','flowers'],g:'American — Aroma'},
+{n:'Azacca',a:15,d:['mango','papaya'],g:'American — Aroma'},
+{n:'Ekuanot',a:14,d:['melon','lime'],g:'American — Aroma'},
+{n:'El Dorado',a:15,d:['pear candy','watermelon'],g:'American — Aroma'},
+{n:'Idaho 7',a:13,d:['tropical','pine'],g:'American — Aroma'},
+{n:'Sabro',a:15,d:['coconut','tangerine'],g:'American — Aroma'},
+{n:'Strata',a:12,d:['dank','strawberry'],g:'American — Aroma'},
+{n:'Talus',a:9,d:['pink grapefruit','rose'],g:'American — Aroma'},
+{n:'Cashmere',a:8.5,d:['lemon-lime','melon'],g:'American — Aroma'},
+{n:'Comet',a:10,d:['grapefruit','grassy'],g:'American — Aroma'},
+{n:'Loral',a:11,d:['floral','dark fruit'],g:'American — Aroma'},
+{n:'Denali',a:14,d:['pineapple','melon'],g:'American — Aroma'},
+{n:'Sultana',a:14,d:['pineapple','citrus'],g:'American — Aroma'},
+{n:'Palisade',a:7.5,d:['apricot','grass'],g:'American — Aroma'},
+{n:'Meridian',a:6,d:['melon','bubblegum'],g:'American — Aroma'},
+{n:'Triumph',a:10.5,d:['pear','light citrus'],g:'American — Aroma'},
+{n:'Lemondrop',a:6,d:['lemon','mint'],g:'American — Aroma'},
+{n:'Jarrylo',a:16,d:['banana','pear'],g:'American — Aroma'},
+{n:'Idaho Gem',a:12,d:['cherry candy','tangerine'],g:'American — Aroma'},
+{n:'Eureka!',a:18,d:['dank','stone fruit'],g:'American — Aroma'},
+{n:'Zappa',a:6.5,d:['mint','savory'],g:'American — Aroma'},
+{n:'Medusa',a:5,d:['melon','guava'],g:'American — Aroma'},
+{n:'Contessa',a:5,d:['melon','floral'],g:'American — Aroma'},
+{n:'Chelan',a:13,d:['floral','blackcurrant'],g:'American — Aroma'},
+/* ---- AMERICAN BITTERING ---- */
+{n:'Magnum',a:14,d:['clean bitterness'],g:'Bittering'},
+{n:'Warrior',a:15.5,d:['clean bitterness'],g:'Bittering'},
+{n:'Nugget',a:13,d:['herbal','resin'],g:'Bittering'},
+{n:'Galena',a:13,d:['blackcurrant','citrus'],g:'Bittering'},
+{n:'Apollo',a:17,d:['grapefruit','resin'],g:'Bittering'},
+{n:'Bravo',a:15.5,d:['orange','floral'],g:'Bittering'},
+{n:'Summit',a:17,d:['tangerine','onion'],g:'Bittering'},
+{n:'Millennium',a:15.5,d:['herbal','resin'],g:'Bittering'},
+{n:'Pahto',a:16.5,d:['clean bitterness'],g:'Bittering'},
+{n:'Newport',a:15,d:['neutral','mild spice'],g:'Bittering'},
+{n:'Horizon',a:12,d:['floral','citrus'],g:'Bittering'},
+{n:'Cluster',a:7,d:['spice','blackcurrant'],g:'Bittering'},
+/* ---- AMERICAN NOBLE-TYPE ---- */
+{n:'Willamette',a:5,d:['floral','mild spice'],g:'American — Noble-Type'},
+{n:'Mt. Hood',a:5,d:['noble herb','clean'],g:'American — Noble-Type'},
+{n:'Liberty',a:4,d:['noble herb','mint'],g:'American — Noble-Type'},
+{n:'Crystal',a:4.5,d:['floral','wood'],g:'American — Noble-Type'},
+{n:'Santiam',a:6,d:['herbal','floral'],g:'American — Noble-Type'},
+{n:'Sterling',a:7,d:['herbal','citrus'],g:'American — Noble-Type'},
+{n:'Ultra',a:4.5,d:['delicate floral','spice'],g:'American — Noble-Type'},
+{n:'Vanguard',a:5,d:['mild herbal','woody'],g:'American — Noble-Type'},
+{n:'Glacier',a:5.5,d:['woody','pear'],g:'American — Noble-Type'},
+{n:'Northern Brewer',a:8.5,d:['woody','mint'],g:'American — Noble-Type'},
+/* ---- ENGLAND ---- */
+{n:'East Kent Goldings',a:5,d:['honey','earth'],g:'England'},
+{n:'Fuggle',a:4.5,d:['earthy','woody'],g:'England'},
+{n:'Target',a:11,d:['sage','spice'],g:'England'},
+{n:'Challenger',a:7.5,d:['cedar','green tea'],g:'England'},
+{n:'Bramling Cross',a:6,d:['blackcurrant','lemon'],g:'England'},
+{n:'First Gold',a:7.5,d:['marmalade','spice'],g:'England'},
+{n:'Progress',a:6,d:['earthy','honey'],g:'England'},
+{n:'Northdown',a:8.5,d:['resin','cedar'],g:'England'},
+{n:'Pilgrim',a:11,d:['spicy lemon'],g:'England'},
+{n:'Admiral',a:14.5,d:['orange','resin'],g:'England'},
+{n:'Sovereign',a:5.5,d:['grassy','floral'],g:'England'},
+{n:'Boadicea',a:8,d:['floral','grassy'],g:'England'},
+{n:'Whitbread Golding (WGV)',a:6.75,d:['earthy','stone fruit'],g:'England'},
+{n:'Phoenix',a:10,d:['spice','pine'],g:'England'},
+{n:'Endeavour',a:8.5,d:['blackcurrant','grapefruit'],g:'England'},
+{n:'Jester',a:8,d:['grapefruit','tropical'],g:'England'},
+{n:'Olicana',a:8.5,d:['mango','elderflower'],g:'England'},
+{n:'Harlequin',a:9.5,d:['tropical','gooseberry'],g:'England'},
+/* ---- GERMANY ---- */
+{n:'Hallertau Mittelfrüh',a:4,d:['floral','noble herb'],g:'Germany'},
+{n:'Tettnang',a:4.5,d:['spice','noble herb'],g:'Germany'},
+{n:'Spalt',a:4.5,d:['spice','grass'],g:'Germany'},
+{n:'Spalter Select',a:4.5,d:['soft spice','noble herb'],g:'Germany'},
+{n:'Hersbrucker',a:3.5,d:['floral','hay'],g:'Germany'},
+{n:'Perle',a:8,d:['mint','spice'],g:'Germany'},
+{n:'Herkules',a:14.5,d:['spicy resin'],g:'Germany'},
+{n:'Taurus',a:14.5,d:['spice','citrus'],g:'Germany'},
+{n:'Merkur',a:13.5,d:['clean','herbal'],g:'Germany'},
+{n:'Tradition',a:6,d:['noble floral','spice'],g:'Germany'},
+{n:'Opal',a:6.5,d:['spice','white pepper'],g:'Germany'},
+{n:'Saphir',a:3.5,d:['tangerine','floral'],g:'Germany'},
+{n:'Smaragd',a:5,d:['fruity','floral'],g:'Germany'},
+{n:'Diamant',a:4,d:['mild fruit','noble herb'],g:'Germany'},
+{n:'Mandarina Bavaria',a:8.5,d:['tangerine','citrus candy'],g:'Germany'},
+{n:'Hüll Melon',a:6.5,d:['honeydew','strawberry'],g:'Germany'},
+{n:'Callista',a:3.5,d:['peach','blackcurrant'],g:'Germany'},
+{n:'Ariana',a:11,d:['blackcurrant','grapefruit'],g:'Germany'},
+{n:'Hallertau Blanc',a:10.5,d:['white wine','gooseberry'],g:'Germany'},
+{n:'Polaris',a:20,d:['mint','pineapple'],g:'Germany'},
+/* ---- CZECHIA / POLAND / SLOVENIA ---- */
+{n:'Saaz',a:3.5,d:['spicy','noble herb'],g:'Czechia / Poland / Slovenia'},
+{n:'Kazbek',a:6.5,d:['lemon','spice'],g:'Czechia / Poland / Slovenia'},
+{n:'Premiant',a:8.5,d:['mild spice','balanced'],g:'Czechia / Poland / Slovenia'},
+{n:'Sladek',a:6,d:['herbal','light citrus'],g:'Czechia / Poland / Slovenia'},
+{n:'Lublin',a:4,d:['mild noble','gentle spice'],g:'Czechia / Poland / Slovenia'},
+{n:'Marynka',a:10.5,d:['resin','spice'],g:'Czechia / Poland / Slovenia'},
+{n:'Styrian Goldings',a:5,d:['earthy','lemon'],g:'Czechia / Poland / Slovenia'},
+{n:'Styrian Wolf',a:13.5,d:['tropical','citrus'],g:'Czechia / Poland / Slovenia'},
+{n:'Styrian Dragon',a:11,d:['grapefruit','blackcurrant'],g:'Czechia / Poland / Slovenia'},
+{n:'Aurora',a:8,d:['floral','herbal'],g:'Czechia / Poland / Slovenia'},
+{n:'Bobek',a:5.5,d:['pine','citrus'],g:'Czechia / Poland / Slovenia'},
+/* ---- AUSTRALIA / NEW ZEALAND ---- */
+{n:'Galaxy',a:14,d:['passionfruit','peach'],g:'Australia / New Zealand'},
+{n:'Vic Secret',a:18,d:['pineapple','pine'],g:'Australia / New Zealand'},
+{n:'Ella',a:14.5,d:['floral','anise'],g:'Australia / New Zealand'},
+{n:'Enigma',a:15.5,d:['raspberry','white wine'],g:'Australia / New Zealand'},
+{n:'Topaz',a:16.5,d:['resin','lychee'],g:'Australia / New Zealand'},
+{n:'Eclipse',a:16,d:['mandarin','pine'],g:'Australia / New Zealand'},
+{n:'Summer',a:6,d:['apricot','melon'],g:'Australia / New Zealand'},
+{n:'Pride of Ringwood',a:9,d:['earthy','herbal'],g:'Australia / New Zealand'},
+{n:'Nelson Sauvin',a:12,d:['white wine','gooseberry'],g:'Australia / New Zealand'},
+{n:'Motueka',a:7,d:['lime','lemongrass'],g:'Australia / New Zealand'},
+{n:'Riwaka',a:5.5,d:['passionfruit','grapefruit'],g:'Australia / New Zealand'},
+{n:'Rakau',a:10.5,d:['apricot','resin'],g:'Australia / New Zealand'},
+{n:'Wai-iti',a:3,d:['peach','lime'],g:'Australia / New Zealand'},
+{n:'Waimea',a:17.5,d:['tangelo','pine'],g:'Australia / New Zealand'},
+{n:'Kohatu',a:6.5,d:['pine','tropical'],g:'Australia / New Zealand'},
+{n:'Pacific Gem',a:14.5,d:['blackberry','oak'],g:'Australia / New Zealand'},
+{n:'Pacific Jade',a:13,d:['black pepper','lemon'],g:'Australia / New Zealand'},
+{n:'Southern Cross',a:12.5,d:['lemon','pine'],g:'Australia / New Zealand'},
+{n:'Green Bullet',a:12.5,d:['raisin','spice'],g:'Australia / New Zealand'},
+{n:'Nectaron',a:12.5,d:['pineapple','passionfruit'],g:'Australia / New Zealand'},
+{n:'Superdelic',a:12,d:['grape','tropical'],g:'Australia / New Zealand'},
+{n:'Moutere',a:17.5,d:['pine','apricot'],g:'Australia / New Zealand'},
+/* ---- FRANCE / JAPAN / SOUTH AFRICA ---- */
+{n:'Strisselspalt',a:4,d:['floral','herbal'],g:'France / Japan / South Africa'},
+{n:'Aramis',a:8,d:['herbal','citrus'],g:'France / Japan / South Africa'},
+{n:'Barbe Rouge',a:9,d:['red berries','strawberry'],g:'France / Japan / South Africa'},
+{n:'Triskel',a:5,d:['floral','apricot'],g:'France / Japan / South Africa'},
+{n:'Mistral',a:7,d:['white wine','citrus'],g:'France / Japan / South Africa'},
+{n:'Sorachi Ace',a:13,d:['lemongrass','dill'],g:'France / Japan / South Africa'},
+{n:'Southern Passion',a:11,d:['passionfruit','guava'],g:'France / Japan / South Africa'},
+{n:'African Queen',a:11,d:['dark fruit','lemongrass'],g:'France / Japan / South Africa'},
+{n:'Southern Star',a:13.5,d:['citrus','black pepper'],g:'France / Japan / South Africa'}];
+
+const YEASTS=[
+/* ---- AMERICAN / NEUTRAL ALE ---- */
+{n:'SafAle US-05 / WLP001 California',att:76,lo:60,hi:72,e:2,p:0,lager:false,g:'American / Neutral Ale',note:'clean, neutral, hop-forward'},
+{n:'Wyeast 1056 American Ale',att:75,lo:60,hi:72,e:2,p:0,lager:false,g:'American / Neutral Ale',note:'clean American workhorse'},
+{n:'Lallemand BRY-97',att:80,lo:59,hi:71,e:2,p:0,lager:false,g:'American / Neutral Ale',note:'clean, slow starter, drops bright'},
+{n:'Lallemand Nottingham',att:79,lo:57,hi:70,e:2,p:0,lager:false,g:'American / Neutral Ale',note:'neutral, fast, cool-tolerant'},
+{n:'Wyeast 1272 American Ale II',att:74,lo:60,hi:72,e:3,p:0,lager:false,g:'American / Neutral Ale',note:'faintly nutty, clean tartness'},
+{n:'WLP090 San Diego Super',att:79,lo:65,hi:68,e:2,p:0,lager:false,g:'American / Neutral Ale',note:'fast, clean, very flocculent'},
+{n:'Wyeast 1450 Denny\'s Favorite',att:75,lo:60,hi:70,e:3,p:0,lager:false,g:'American / Neutral Ale',note:'silky mouthfeel, malt roundness'},
+{n:'WLP008 East Coast Ale',att:72,lo:68,hi:73,e:3,p:0,lager:false,g:'American / Neutral Ale',note:'slight fruit, crisp dry finish'},
+{n:'SafAle K-97 German Ale',att:75,lo:59,hi:72,e:3,p:0,lager:false,g:'American / Neutral Ale',note:'clean, light fruit, big krausen'},
+/* ---- HAZY / NEW ENGLAND ---- */
+{n:'Wyeast 1318 London Ale III',att:73,lo:64,hi:74,e:6,p:0,lager:false,g:'Hazy / New England',note:'soft, peachy — hazy IPA staple'},
+{n:'WLP4000 Vermont Ale (Conan)',att:75,lo:68,hi:72,e:7,p:0,lager:false,g:'Hazy / New England',note:'peach and apricot, big esters warm'},
+{n:'LalBrew Verdant IPA',att:78,lo:64,hi:72,e:6,p:0,lager:false,g:'Hazy / New England',note:'orange and stone fruit, soft malt'},
+{n:'LalBrew New England',att:79,lo:59,hi:72,e:7,p:0,lager:false,g:'Hazy / New England',note:'tropical and citrus, hazy'},
+/* ---- ENGLISH ALE ---- */
+{n:'SafAle S-04 English',att:75,lo:59,hi:68,e:4,p:0,lager:false,g:'English Ale',note:'light fruit, fast, clears well'},
+{n:'WLP002 English Ale',att:68,lo:65,hi:68,e:6,p:0,lager:false,g:'English Ale',note:'malty, full, stone fruit'},
+{n:'Wyeast 1968 London ESB',att:69,lo:64,hi:72,e:6,p:0,lager:false,g:'English Ale',note:'malty, very flocculent'},
+{n:'Wyeast 1098 British Ale',att:76,lo:64,hi:72,e:4,p:0,lager:false,g:'English Ale',note:'crisp, slightly tart, fast'},
+{n:'Wyeast 1275 Thames Valley',att:74,lo:62,hi:72,e:4,p:0,lager:false,g:'English Ale',note:'clean English, mild stone fruit'},
+{n:'Wyeast 1187 Ringwood',att:70,lo:64,hi:74,e:7,p:0,lager:false,g:'English Ale',note:'big fruit and butterscotch — needs a rest'},
+{n:'WLP004 Irish Ale',att:72,lo:65,hi:68,e:3,p:0,lager:false,g:'English Ale',note:'slight tartness, stout-friendly'},
+{n:'WLP005 British Ale',att:70,lo:65,hi:70,e:5,p:0,lager:false,g:'English Ale',note:'malty, restrained fruit, very flocculent'},
+{n:'WLP013 London Ale',att:71,lo:66,hi:71,e:5,p:0,lager:false,g:'English Ale',note:'dry, woody, mildly estery'},
+{n:'WLP023 Burton Ale',att:72,lo:68,hi:73,e:6,p:0,lager:false,g:'English Ale',note:'apple, pear, mineral edge'},
+{n:'Wyeast 1728 Scottish Ale',att:71,lo:55,hi:75,e:4,p:0,lager:false,g:'English Ale',note:'malt-forward, dry at high gravity'},
+{n:'LalBrew Windsor',att:67,lo:59,hi:72,e:6,p:0,lager:false,g:'English Ale',note:'fruity, low attenuation, leaves body'},
+/* ---- GERMAN ALE / WHEAT ---- */
+{n:'Wyeast 3068 Weihenstephan',att:76,lo:64,hi:75,e:8,p:7,lager:false,g:'German Ale / Wheat',note:'banana and clove'},
+{n:'WLP300 Hefeweizen',att:74,lo:65,hi:72,e:8,p:7,lager:false,g:'German Ale / Wheat',note:'clove-leaning wheat'},
+{n:'SafAle WB-06',att:86,lo:59,hi:75,e:8,p:8,lager:false,g:'German Ale / Wheat',note:'banana-forward, phenolic, dry'},
+{n:'Wyeast 3638 Bavarian Wheat',att:73,lo:64,hi:75,e:9,p:6,lager:false,g:'German Ale / Wheat',note:'banana, bubblegum, vanilla'},
+{n:'Wyeast 3333 German Wheat',att:73,lo:63,hi:75,e:6,p:6,lager:false,g:'German Ale / Wheat',note:'tart and restrained wheat'},
+{n:'WLP380 Hefeweizen IV',att:76,lo:66,hi:70,e:7,p:5,lager:false,g:'German Ale / Wheat',note:'tart citrus, less banana'},
+{n:'Wyeast 2565 Kölsch',att:75,lo:56,hi:70,e:3,p:0,lager:false,g:'German Ale / Wheat',note:'subtle fruit, dry, lager it cold'},
+{n:'Wyeast 1007 German Ale',att:75,lo:55,hi:68,e:2,p:0,lager:false,g:'German Ale / Wheat',note:'very clean, crisp, dry'},
+{n:'WLP036 Düsseldorf Alt',att:68,lo:65,hi:69,e:3,p:0,lager:false,g:'German Ale / Wheat',note:'malty and clean, mild fruit'},
+{n:'Wyeast 1010 American Wheat',att:76,lo:58,hi:74,e:3,p:0,lager:false,g:'German Ale / Wheat',note:'clean, no phenols, hazy'},
+/* ---- BELGIAN / FRENCH ---- */
+{n:'Wyeast 1214 Belgian Abbey',att:76,lo:68,hi:78,e:8,p:4,lager:false,g:'Belgian / French',note:'plum, spice, warming'},
+{n:'Wyeast 1388 Belgian Golden',att:77,lo:65,hi:75,e:8,p:5,lager:false,g:'Belgian / French',note:'pepper, pear, high attenuation'},
+{n:'Wyeast 3787 Trappist High Gravity',att:76,lo:64,hi:78,e:8,p:5,lager:false,g:'Belgian / French',note:'plum and spice — the Westmalle profile'},
+{n:'WLP530 Abbey Ale',att:76,lo:66,hi:72,e:8,p:5,lager:false,g:'Belgian / French',note:'dark fruit, spice, dry finish'},
+{n:'WLP550 Belgian Ale (Ardennes)',att:76,lo:65,hi:80,e:7,p:6,lager:false,g:'Belgian / French',note:'peppery, floral, heat-tolerant'},
+{n:'WLP510 Bastogne Belgian',att:77,lo:66,hi:72,e:6,p:4,lager:false,g:'Belgian / French',note:'dry and clean, slight tartness'},
+{n:'Wyeast 3711 French Saison',att:82,lo:65,hi:77,e:7,p:4,lager:false,g:'Belgian / French',note:'peppery, bone dry'},
+{n:'WLP565 Belgian Saison',att:78,lo:68,hi:80,e:7,p:5,lager:false,g:'Belgian / French',note:'earthy, spicy, slow finish'},
+{n:'LalBrew Belle Saison',att:85,lo:63,hi:79,e:7,p:5,lager:false,g:'Belgian / French',note:'fast, dry, peppery'},
+{n:'WLP400 Belgian Wit',att:74,lo:67,hi:74,e:6,p:6,lager:false,g:'Belgian / French',note:'tart, phenolic, hazy'},
+{n:'Wyeast 3944 Belgian Witbier',att:74,lo:62,hi:75,e:6,p:6,lager:false,g:'Belgian / French',note:'spicy, tart, low flocculation'},
+{n:'SafAle T-58',att:75,lo:59,hi:77,e:6,p:6,lager:false,g:'Belgian / French',note:'peppery, spicy, bottle-conditions well'},
+{n:'LalBrew Abbaye',att:82,lo:63,hi:79,e:7,p:4,lager:false,g:'Belgian / French',note:'fruity esters, high alcohol tolerance'},
+/* ---- LAGER ---- */
+{n:'Saflager W-34/70',att:82,lo:48,hi:58,e:1,p:0,lager:true,g:'Lager',note:'clean, faintly sulfury, crisp'},
+{n:'Saflager S-23',att:82,lo:48,hi:59,e:2,p:0,lager:true,g:'Lager',note:'fruity-leaning lager'},
+{n:'Novalager',att:82,lo:54,hi:68,e:2,p:0,lager:true,g:'Lager',note:'lager character at ale temperatures'},
+{n:'LalBrew Diamond Lager',att:80,lo:50,hi:59,e:1,p:0,lager:true,g:'Lager',note:'clean and dry, good flocculation'},
+{n:'WLP830 German Lager',att:76,lo:50,hi:55,e:1,p:0,lager:true,g:'Lager',note:'malt-forward, crisp'},
+{n:'WLP833 German Bock',att:73,lo:48,hi:55,e:1,p:0,lager:true,g:'Lager',note:'rich malt, balanced'},
+{n:'Wyeast 2124 Bohemian Lager',att:73,lo:48,hi:58,e:1,p:0,lager:true,g:'Lager',note:'clean, malty, Czech classic'},
+{n:'Wyeast 2206 Bavarian Lager',att:75,lo:46,hi:58,e:1,p:0,lager:true,g:'Lager',note:'full, malty — Munich styles'},
+{n:'Wyeast 2308 Munich Lager',att:72,lo:48,hi:56,e:1,p:0,lager:true,g:'Lager',note:'smooth and malty, low sulfur'},
+{n:'Wyeast 2278 Czech Pils',att:73,lo:50,hi:58,e:1,p:0,lager:true,g:'Lager',note:'dry finish, slight sulfur'},
+{n:'Wyeast 2007 Pilsen Lager',att:73,lo:46,hi:58,e:1,p:0,lager:true,g:'Lager',note:'very clean and light'},
+{n:'Wyeast 2042 Danish Lager',att:75,lo:46,hi:56,e:1,p:0,lager:true,g:'Lager',note:'dry and crisp, soft finish'},
+{n:'WLP800 Pilsner Lager',att:75,lo:50,hi:55,e:2,p:0,lager:true,g:'Lager',note:'dry, malty, faintly fruity'},
+{n:'WLP802 Czech Budejovice',att:77,lo:50,hi:55,e:1,p:0,lager:true,g:'Lager',note:'dry, clean, soft malt finish'},
+{n:'WLP820 Oktoberfest Lager',att:70,lo:52,hi:58,e:1,p:0,lager:true,g:'Lager',note:'malty and slow — be patient'},
+{n:'WLP840 American Lager',att:78,lo:50,hi:55,e:1,p:0,lager:true,g:'Lager',note:'crisp, dry, very low ester'},
+{n:'WLP815 Belgian Lager',att:73,lo:50,hi:58,e:2,p:1,lager:true,g:'Lager',note:'clean and malty with a Belgian edge'},
+{n:'WLP810 San Francisco Lager',att:68,lo:58,hi:65,e:2,p:0,lager:true,g:'Lager',note:'steam beer, woody-malty'},
+{n:'Wyeast 2112 California Lager',att:69,lo:58,hi:68,e:2,p:0,lager:true,g:'Lager',note:'lager profile at ale temperatures'},
+/* ---- KVEIK ---- */
+{n:'Lallemand Voss Kveik',att:80,lo:75,hi:95,e:6,p:0,lager:false,g:'Kveik',note:'orange peel, ferments hot and fast'},
+{n:'Hornindal Kveik',att:79,lo:72,hi:98,e:7,p:0,lager:false,g:'Kveik',note:'pineapple and tropical fruit'},
+{n:'Omega Lutra Kveik',att:79,lo:68,hi:95,e:2,p:0,lager:false,g:'Kveik',note:'extremely clean — pseudo-lager in days'},
+{n:'Ebbegarden Kveik',att:78,lo:77,hi:95,e:6,p:1,lager:false,g:'Kveik',note:'fruity with light spice'},
+{n:'Oslo Kveik',att:75,lo:60,hi:95,e:3,p:0,lager:false,g:'Kveik',note:'clean and neutral across a huge range'},
+{n:'Framgarden Kveik',att:76,lo:77,hi:95,e:6,p:0,lager:false,g:'Kveik',note:'stone fruit and light citrus'},
+/* ---- WILD / SOUR / MIXED ---- */
+{n:'Brettanomyces bruxellensis',att:85,lo:65,hi:80,e:7,p:6,lager:false,g:'Wild / Sour / Mixed',note:'barnyard and leather over months'},
+{n:'Brettanomyces claussenii',att:80,lo:65,hi:80,e:6,p:3,lager:false,g:'Wild / Sour / Mixed',note:'mild pineapple, gentlest Brett'},
+{n:'Brettanomyces lambicus',att:85,lo:65,hi:80,e:7,p:7,lager:false,g:'Wild / Sour / Mixed',note:'cherry pie, spice, smoky funk'},
+{n:'Wyeast 3763 Roeselare Blend',att:80,lo:65,hi:80,e:7,p:5,lager:false,g:'Wild / Sour / Mixed',note:'Flanders red blend — a year or more'},
+{n:'WLP655 Sour Mix 1',att:82,lo:65,hi:80,e:7,p:6,lager:false,g:'Wild / Sour / Mixed',note:'Sacch, Brett, Lacto and Pedio blend'},
+{n:'LalBrew Philly Sour',att:78,lo:68,hi:77,e:5,p:0,lager:false,g:'Wild / Sour / Mixed',note:'lactic acid and stone fruit, single pitch'},
+{n:'WLP644 Saccharomyces Trois',att:83,lo:70,hi:85,e:8,p:2,lager:false,g:'Wild / Sour / Mixed',note:'pineapple and mango, not actually Brett'},
+/* ---- SPECIALTY / HIGH GRAVITY ---- */
+{n:'WLP099 Super High Gravity',att:90,lo:59,hi:74,e:4,p:0,lager:false,g:'Specialty',note:'tolerates 25% ABV — barleywine, imperial stout'},
+{n:'Lalvin EC-1118 Champagne',att:95,lo:50,hi:86,e:1,p:0,lager:false,g:'Specialty',note:'neutral and ruthless — dries anything out'},
+{n:'Diastaticus strain',att:95,lo:65,hi:78,e:5,p:3,lager:false,g:'Specialty',note:'ferments dextrins bone dry — bottle bomb risk'}];
+
+const WATER_PRESETS={
+'RO / Distilled':{ca:0,mg:0,na:0,so4:0,cl:0,hco3:0},
+'Balanced Profile':{ca:80,mg:5,na:25,so4:90,cl:90,hco3:40},
+'Pilsen (soft)':{ca:7,mg:2,na:2,so4:5,cl:5,hco3:15},
+'Burton (hoppy)':{ca:275,mg:40,na:25,so4:610,cl:35,hco3:270},
+'Dublin (stout)':{ca:115,mg:4,na:12,so4:55,cl:19,hco3:200},
+'Munich (dark)':{ca:76,mg:18,na:2,so4:10,cl:2,hco3:200},
+'Vienna (amber)':{ca:75,mg:15,na:10,so4:60,cl:15,hco3:120},
+'London (bitter)':{ca:52,mg:32,na:86,so4:32,cl:34,hco3:104},
+'Dortmund (crisp)':{ca:225,mg:40,na:60,so4:120,cl:60,hco3:180},
+'Malty / NEIPA':{ca:100,mg:8,na:15,so4:60,cl:150,hco3:40}};
+
+const STYLES=[
+['— No style selected —',1.030,1.120,0.995,1.030,2,14,0,120,1,50],
+['1A American Light Lager',1.028,1.040,0.998,1.008,2.8,4.2,8,12,2,3],
+['1B American Lager',1.040,1.050,1.004,1.010,4.2,5.3,8,18,2,4],
+['1C Cream Ale',1.042,1.055,1.006,1.012,4.2,5.6,8,20,2.5,5],
+['2A International Pale Lager',1.042,1.050,1.008,1.012,4.6,6.0,18,25,2,6],
+['3A Czech Pale Lager',1.028,1.044,1.008,1.014,3.0,4.1,20,35,3,6],
+['3B Czech Premium Pale Lager',1.044,1.060,1.013,1.017,4.2,5.8,30,45,3.5,6],
+['4A Munich Helles',1.044,1.048,1.006,1.012,4.7,5.4,16,22,3,5],
+['4B Festbier',1.054,1.057,1.010,1.012,5.8,6.3,18,25,4,7],
+['4C Märzen',1.054,1.060,1.010,1.014,5.8,6.3,18,24,8,17],
+['5A German Leichtbier',1.026,1.034,1.006,1.010,2.4,3.6,15,28,2,5],
+['5B Kölsch',1.044,1.050,1.007,1.011,4.4,5.2,18,30,3.5,5],
+['5D German Pils',1.044,1.050,1.008,1.013,4.4,5.2,22,40,2,5],
+['6B Rauchbier',1.050,1.057,1.012,1.016,4.8,6.0,18,30,12,22],
+['6C Dunkles Bock',1.064,1.072,1.013,1.019,6.3,7.2,20,27,14,22],
+['7A Vienna Lager',1.048,1.055,1.010,1.014,4.7,5.5,18,30,9,15],
+['7B Altbier',1.044,1.052,1.008,1.014,4.3,5.5,25,50,11,17],
+['8A Munich Dunkel',1.048,1.056,1.010,1.016,4.5,5.6,18,28,14,28],
+['8B Schwarzbier',1.046,1.052,1.010,1.016,4.4,5.4,20,30,17,30],
+['9A Doppelbock',1.072,1.112,1.016,1.024,7.0,10.0,16,26,6,25],
+['10A Weissbier',1.044,1.052,1.008,1.014,4.3,5.6,8,15,2,6],
+['10B Dunkles Weissbier',1.044,1.056,1.010,1.014,4.3,5.6,10,18,14,23],
+['11A Ordinary Bitter',1.030,1.039,1.007,1.011,3.2,3.8,25,35,8,14],
+['11B Best Bitter',1.040,1.048,1.008,1.012,3.8,4.6,25,40,8,16],
+['12A British Golden Ale',1.038,1.053,1.006,1.012,3.8,5.0,20,45,2,6],
+['13B British Brown Ale',1.040,1.052,1.008,1.013,4.2,5.4,20,30,12,22],
+['14B Scottish Export',1.040,1.060,1.010,1.016,3.9,6.0,15,30,13,22],
+['15B Irish Stout',1.036,1.044,1.007,1.011,4.0,4.5,25,45,25,40],
+['16A Sweet Stout',1.044,1.060,1.012,1.024,4.0,6.0,20,40,30,40],
+['16C Foreign Extra Stout',1.056,1.075,1.010,1.018,6.3,8.0,50,70,30,40],
+['17B Old Ale',1.055,1.088,1.015,1.022,5.5,9.0,30,60,10,22],
+['18A Blonde Ale',1.038,1.054,1.008,1.013,3.8,5.5,15,28,3,6],
+['18B American Pale Ale',1.045,1.060,1.010,1.015,4.5,6.2,30,50,5,10],
+['19A American Amber Ale',1.045,1.060,1.010,1.015,4.5,6.2,25,40,10,17],
+['19C American Brown Ale',1.045,1.060,1.010,1.016,4.3,6.2,20,30,18,35],
+['20A American Porter',1.050,1.070,1.012,1.018,4.8,6.5,25,50,22,40],
+['20B American Stout',1.050,1.075,1.010,1.022,5.0,7.0,35,75,30,40],
+['21A American IPA',1.056,1.070,1.008,1.014,5.5,7.5,40,70,6,14],
+['21C Hazy IPA',1.060,1.085,1.010,1.015,6.0,9.0,25,60,3,7],
+['22A Double IPA',1.065,1.085,1.008,1.018,7.5,10.0,60,100,6,14],
+['23A Berliner Weisse',1.028,1.032,1.003,1.006,2.8,3.8,3,8,2,3],
+['24B Belgian Pale Ale',1.048,1.054,1.010,1.014,4.8,5.5,20,30,8,14],
+['25B Saison',1.048,1.065,1.002,1.008,5.0,7.0,20,35,5,14],
+['26B Belgian Dubbel',1.062,1.075,1.008,1.018,6.0,7.6,15,25,10,17],
+['26C Belgian Tripel',1.075,1.085,1.008,1.014,7.5,9.5,20,40,4.5,7],
+['27 Kellerbier',1.045,1.060,1.008,1.014,4.7,5.8,20,35,4,17]];
+
+const SRM_HEX=['#FFE699','#FFE699','#FFD878','#FFCA5A','#FFBF42','#FBB123','#F8A733','#F39C00','#EA8F00','#E58500','#DE7C00','#D77200','#CF6900','#CB6200','#C35900','#BB5100','#B54C00','#B04500','#A63E00','#A13700','#9B3200','#952D00','#8E2900','#882300','#821E00','#7B1A00','#771900','#701400','#6A0E00','#660D00','#5E0B00','#5A0A02','#560903','#520907','#4C0505','#470606','#440607','#3F0708','#3B0607','#3A070B','#36080A'];
+
+/* ================= HELPERS ================= */
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const r2=(v,d)=>{d=d===undefined?1:d;return (Math.round(v*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);};
+const grav=v=>v.toFixed(3);
+const uid=()=>Math.random().toString(36).slice(2,9);
+const srmHex=s=>s>40?'#280603':SRM_HEX[clamp(Math.round(s||1),1,40)];
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function groupedOpts(arr){
+  const order=[];
+  arr.forEach(x=>{const g=x.g||'Other'; if(order.indexOf(g)<0)order.push(g);});
+  return order.map(g=>'<optgroup label="'+esc(g)+'">'+
+    arr.filter(x=>(x.g||'Other')===g)
+       .map(x=>'<option value="'+esc(x.n)+'">'+esc(x.n)+'</option>').join('')+
+    '</optgroup>').join('');
+}
+const FERM_OPTS=groupedOpts(FERMENTABLES);
+const HOP_OPTS=groupedOpts(HOPS);
+const USE_OPTS=['Boil','First Wort','Whirlpool','Dry Hop'].map(u=>'<option value="'+u+'">'+u+'</option>').join('');
+
+/* ================= STATE ================= */
+function defaultRecipe(){return{
+  name:'River Bend Amber', style:'7A Vienna Lager',
+  batch:3.5, efficiency:72, boilTime:60, boilOff:1.0, trubLoss:0.25, mashLoss:0.25,
+  mashThickness:1.35, mashTemp:154, mashTime:60, grainTemp:68, fermTemp:52, whirlpoolTemp:175,
+  fermentables:[
+    {id:uid(),n:'Vienna Malt',ppg:36,l:3.5,g:'Base',lb:5.0,sugar:false},
+    {id:uid(),n:'Munich Malt (Light)',ppg:37,l:9,g:'Base',lb:1.25,sugar:false},
+    {id:uid(),n:'CaraMunich III',ppg:34,l:60,g:'Crystal',lb:0.5,sugar:false},
+    {id:uid(),n:'Carafa Special II',ppg:32,l:430,g:'Roast',lb:0.08,sugar:false}],
+  hops:[
+    {id:uid(),name:'Hallertau Mittelfrüh',alpha:4,oz:0.6,time:60,use:'Boil'},
+    {id:uid(),name:'Hallertau Mittelfrüh',alpha:4,oz:0.4,time:15,use:'Boil'}],
+  yeastName:'Saflager W-34/70',
+  water:Object.assign({},WATER_PRESETS['Vienna (amber)']), waterPreset:'Vienna (amber)',
+  mashLog:[]
+};}
+function shelfLager(){return{
+  name:'Practice Run', style:'19A American Amber Ale',
+  batch:3.5, efficiency:72, boilTime:60, boilOff:1.0, trubLoss:0.25, mashLoss:0.25,
+  mashThickness:1.35, mashTemp:154, mashTime:60, grainTemp:68, fermTemp:52, whirlpoolTemp:175,
+  fermentables:[
+    {id:uid(),n:'Vienna Malt',ppg:36,l:3.5,g:'Base',lb:2.00,sugar:false},
+    {id:uid(),n:'Munich Malt (Dark)',ppg:36,l:20,g:'Base',lb:1.30,sugar:false},
+    {id:uid(),n:'Pilsner Malt',ppg:37,l:1.6,g:'Base',lb:1.05,sugar:false},
+    {id:uid(),n:'Flaked Corn',ppg:39,l:0.5,g:'Adjunct',lb:0.80,sugar:false},
+    {id:uid(),n:'Crystal 40L',ppg:34,l:40,g:'Crystal',lb:0.30,sugar:false},
+    {id:uid(),n:'CaraPils / Dextrine',ppg:33,l:2,g:'Specialty',lb:0.20,sugar:false},
+    {id:uid(),n:'Acidulated Malt',ppg:27,l:3,g:'Specialty',lb:0.08,sugar:false}],
+  hops:[
+    {id:uid(),name:'Hallertau Mittelfrüh',alpha:4,oz:0.70,time:60,use:'Boil'},
+    {id:uid(),name:'Hallertau Mittelfrüh',alpha:4,oz:0.25,time:10,use:'Boil'}],
+  yeastName:'Saflager W-34/70',
+  water:{ca:55,mg:10,na:10,so4:40,cl:130,hco3:0}, waterPreset:'Custom'
+};}
+function riverBendOktoberfest(){return{
+  name:'River Bend October Fest', style:'4C Märzen',
+  batch:2.5, efficiency:68, boilTime:60, boilOff:1.0, trubLoss:0.25, mashLoss:0.25,
+  mashThickness:1.35, mashTemp:152, mashTime:60, grainTemp:68, fermTemp:52, whirlpoolTemp:175,
+  fermentables:[
+    {id:uid(),n:'Munich Malt (Light)',ppg:37,l:9,g:'Base',lb:3.00,sugar:false},
+    {id:uid(),n:'Golden Promise',ppg:37,l:2.5,g:'Base',lb:1.50,sugar:false},
+    {id:uid(),n:'2-Row Pale Malt',ppg:37,l:1.8,g:'Base',lb:0.50,sugar:false},
+    {id:uid(),n:'CaraMunich III',ppg:34,l:60,g:'Crystal',lb:0.50,sugar:false}],
+  hops:[
+    {id:uid(),name:'Mt. Hood',alpha:4.1,oz:0.60,time:60,use:'Boil'},
+    {id:uid(),name:'Mt. Hood',alpha:4.1,oz:0.20,time:15,use:'Boil'}],
+  yeastName:'Saflager W-34/70',
+  water:{ca:55,mg:0,na:0,so4:39,cl:68,hco3:0}, waterPreset:'Custom',
+  mashLog:[]
+};}
+
+const PRESETS={'River Bend Amber (Vienna lager)':defaultRecipe,'Practice Run (amber shelf lager)':shelfLager,'River Bend October Fest (Märzen)':riverBendOktoberfest};
+
+let R=defaultRecipe();
+const yeast=()=>YEASTS.find(y=>y.n===R.yeastName)||YEASTS[0];
+
+/* ================= MATH ================= */
+function computeAll(){
+  const Y=yeast(), bg=Math.max(0.5,R.batch);
+  const fer=R.fermentables.filter(f=>f.lb>0);
+  const grainLb=fer.filter(f=>!f.sugar).reduce((s,f)=>s+f.lb,0);
+  const totalLb=fer.reduce((s,f)=>s+f.lb,0)||1;
+
+  let grainPts=0,sugarPts=0;
+  fer.forEach(f=>{const p=f.lb*f.ppg; if(f.sugar)sugarPts+=p; else grainPts+=p*(R.efficiency/100);});
+  const ogPts=(grainPts+sugarPts)/bg, og=1+ogPts/1000;
+
+  const mcu=fer.reduce((s,f)=>s+f.lb*f.l,0)/bg;
+  const srm=1.4922*Math.pow(Math.max(mcu,0),0.6859);
+
+  const absorb=grainLb*0.125;
+  const boilVol=bg+R.trubLoss+R.boilOff*(R.boilTime/60);
+  const strikeW=grainLb*(R.mashThickness/4);
+  const totalWater=boilVol+absorb+R.mashLoss;
+  const spargeW=Math.max(0,totalWater-strikeW);
+  const preBoilGrav=boilVol>0?1+(ogPts*bg/boilVol)/1000:og;
+  const strikeTemp=grainLb>0?(0.2/R.mashThickness)*(R.mashTemp-R.grainTemp)+R.mashTemp:R.mashTemp;
+
+  const bigness=1.65*Math.pow(0.000125,preBoilGrav-1);
+  let ibu=0,aromaOz=0;
+  R.hops.forEach(h=>{
+    if(!h.oz)return;
+    let util=0;
+    if(h.use==='Boil'||h.use==='First Wort'){
+      const t=h.use==='First Wort'?h.time+5:h.time;
+      util=bigness*((1-Math.exp(-0.04*t))/4.15);
+    } else if(h.use==='Whirlpool'){
+      util=bigness*((1-Math.exp(-0.04*Math.min(h.time,30)))/4.15)*
+        (R.whirlpoolTemp>190?0.55:R.whirlpoolTemp>170?0.35:0.15);
+    }
+    ibu+=(util*(h.alpha/100)*h.oz*7490)/bg;
+    const w=h.use==='Dry Hop'?2.4:h.use==='Whirlpool'?1.7:h.time<=10?1.1:h.time<=25?0.5:0.08;
+    aromaOz+=h.oz*w;
+  });
+  const aromaPerGal=aromaOz/bg;
+
+  const mashAdj=clamp((152-R.mashTemp)*1.3,-9,9);
+  const effAtt=clamp(Y.att+mashAdj+(R.fermTemp>Y.hi?1.5:0),45,95);
+  const fgPts=(grainPts/bg)*(1-effAtt/100)+(sugarPts/bg)*0.02;
+  const fg=1+fgPts/1000;
+  const abv=og>fg?(76.08*(og-fg)/(1.775-og))*(fg/0.794):0;
+  const realAtt=ogPts>0?((ogPts-fgPts)/ogPts)*100:0;
+  const bugu=ogPts>0?ibu/ogPts:0;
+  const cal12=Math.max(0,1881.22*fg*((og-fg)/(1.775-og))+3550*fg*(0.1808*og+0.8192*fg-1.0004));
+
+  const pct=p=>(fer.filter(p).reduce((s,f)=>s+f.lb,0)/totalLb)*100;
+  const crystalPct=pct(f=>f.l>=10&&f.l<150&&f.g!=='Base');
+  const roastLoad=fer.reduce((s,f)=>s+f.lb*(f.l>150?(f.l-140)/55:0),0)/bg;
+  const munichPct=pct(f=>/Munich|Vienna|Melanoidin|Aromatic|Biscuit|Victory|Amber Malt|Brown Malt|Abbey Malt|Special Roast|Kiln Coffee|Toasted Pale|Honey Malt|Brumalt/.test(f.n));
+  const dextrinPct=pct(f=>/CaraPils|Dextrine|Carafoam|Oats|Flaked Wheat|Wheat Malt|Flaked Barley|Torrified|Oat Malt|Chit Malt|Golden Naked/.test(f.n));
+  const smokePct=pct(f=>/Smoked|Rauch|Peated/.test(f.n));
+  const acidPct=pct(f=>/Acidulated/.test(f.n));
+
+  const w=R.water;
+  const scRatio=w.cl>0?w.so4/w.cl:(w.so4>0?99:1);
+  const ra=w.hco3*0.8202-(w.ca/1.4+w.mg/1.7);
+  const mashPh=clamp(5.75-0.011*srm-acidPct*0.09+ra*0.0032,4.6,6.4);
+
+  const bitterness=clamp(0.5*(ibu/7)+0.5*(bugu*11),0,10);
+  const hopAroma=clamp(aromaPerGal*4.2,0,10);
+  const malt=clamp(2.2+(ogPts-40)/9+crystalPct*0.10+munichPct*0.055+smokePct*0.05,0,10);
+  const roast=clamp(roastLoad*3.1,0,10);
+  const body=clamp(2.6+(fgPts-6)/1.5+(R.mashTemp-150)*0.42+dextrinPct*0.10,0,10);
+  const sweetness=clamp(1.8+(fgPts-6)/2.1+crystalPct*0.14-bitterness*0.30-roast*0.12,0,10);
+  const fruity=clamp(Y.e+Y.p*0.35+hopAroma*0.18+(R.fermTemp>Y.hi?2:0),0,10);
+  const crisp=clamp(2+(effAtt-72)*0.35+(Y.lager?2.2:0)+clamp(Math.log(Math.max(scRatio,0.15))/Math.LN2*0.9,-2,2.4)-body*0.35,0,10);
+
+  return{og:og,fg:fg,abv:abv,ibu:ibu,srm:srm,srmColor:srmHex(srm),bugu:bugu,cal12:cal12,
+    effAtt:effAtt,realAtt:realAtt,mashAdj:mashAdj,grainLb:grainLb,totalLb:totalLb,boilVol:boilVol,
+    strikeW:strikeW,spargeW:spargeW,absorb:absorb,strikeTemp:strikeTemp,preBoilGrav:preBoilGrav,
+    scRatio:scRatio,ra:ra,mashPh:mashPh,aromaPerGal:aromaPerGal,
+    flavor:{'Bitterness':bitterness,'Hop Aroma':hopAroma,'Malt':malt,'Caramel/Sweet':sweetness,
+      'Roast':roast,'Body':body,'Fruity/Ester':fruity,'Crisp/Dry':crisp},
+    grist:fer.map(f=>({name:f.n,pct:(f.lb/totalLb)*100,color:srmHex(clamp(f.l*0.75,1,40)),lb:f.lb}))
+      .sort((a,b)=>b.pct-a.pct)};
+}
+
+function tastingNote(o){
+  const f=o.flavor,Y=yeast(),w=[];
+  const lvl=(v,lo,hi)=>v<lo?0:v<hi?1:2;
+  const bodyW=['light and thin','medium-bodied','full and chewy'][lvl(f.Body,3.6,6.4)];
+  const bitW=['barely bitter','moderately bitter','aggressively bitter'][lvl(f.Bitterness,3.2,6.4)];
+  const bal=o.bugu<0.45?'malt-forward':o.bugu<0.72?'balanced':'hop-forward';
+  const col=o.srm<4?'straw':o.srm<7?'gold':o.srm<11?'deep gold to light amber':o.srm<16?'amber':
+    o.srm<22?'copper-brown':o.srm<30?'dark brown':'near-black';
+  w.push('Pours '+col+' at '+r2(o.srm)+' SRM.');
+  if(f.Roast>5)w.push('Roast leads the aroma — coffee and dark chocolate.');
+  else if(f['Hop Aroma']>6)w.push('Big hop aroma up front'+(R.hops.some(h=>h.use==='Dry Hop')?' from the dry hop':'')+'.');
+  else if(f.Malt>6)w.push('Bready, toasty malt leads the nose.');
+  else w.push('Clean, restrained aroma.');
+  w.push(bodyW.charAt(0).toUpperCase()+bodyW.slice(1)+', '+bitW+', and '+bal+'.');
+  if(f['Caramel/Sweet']>6.5)w.push('Noticeable caramel sweetness lingers.');
+  if(f['Crisp/Dry']>6.5)w.push('Finishes dry and snappy.');
+  if(f['Fruity/Ester']>6)w.push('Yeast pushes fruit and spice — '+Y.note+'.');
+  if(o.mashAdj<=-4)w.push('Mashing at '+R.mashTemp+'°F holds body back from fermenting out.');
+  if(o.mashAdj>=4)w.push('Mashing at '+R.mashTemp+'°F drives a drier, thinner finish.');
+  const ds=[];
+  R.hops.forEach(h=>{
+    if(h.oz>0&&(h.use==='Dry Hop'||h.use==='Whirlpool'||h.time<=20)){
+      const hd=HOPS.find(x=>x.n===h.name);
+      if(hd)hd.d.forEach(d=>{if(ds.indexOf(d)<0)ds.push(d);});
+    }});
+  if(ds.length)w.push('Hop character: '+ds.slice(0,5).join(', ')+'.');
+  if(o.scRatio>2.4)w.push('High sulfate sharpens the bitterness.');
+  else if(o.scRatio<0.6)w.push('Chloride-heavy water rounds the mouthfeel out.');
+  return w.join(' ');
+}
+
+/* ================= GRAPHICS ================= */
+function glassSVG(color,foam){
+  const h=clamp(foam,8,26);
+  let bubbles='';
+  for(let i=0;i<14;i++){
+    const x=30+(i*37)%64, r=1+(i%3)*0.8, d=3+(i%5)*0.9, del=(i*0.55)%5;
+    bubbles+='<circle cx="'+x+'" r="'+r+'" fill="#fff" opacity="0.35">'+
+      '<animate attributeName="cy" values="180;36" dur="'+d+'s" begin="'+del+'s" repeatCount="indefinite"/>'+
+      '<animate attributeName="opacity" values="0;0.4;0" dur="'+d+'s" begin="'+del+'s" repeatCount="indefinite"/></circle>';
+  }
+  return '<svg viewBox="0 0 120 200" style="width:100%;max-height:250px;">'+
+  '<defs><clipPath id="gc"><path d="M26 30 L94 30 L86 178 Q85 186 77 186 L43 186 Q35 186 34 178 Z"/></clipPath>'+
+  '<linearGradient id="sh" x1="0" y1="0" x2="1" y2="0">'+
+  '<stop offset="0%" stop-color="#fff" stop-opacity=".30"/><stop offset="22%" stop-color="#fff" stop-opacity=".04"/>'+
+  '<stop offset="75%" stop-color="#000" stop-opacity=".10"/><stop offset="100%" stop-color="#fff" stop-opacity=".18"/></linearGradient>'+
+  '<radialGradient id="bl" cx=".5" cy=".6" r=".7"><stop offset="0%" stop-color="'+color+'" stop-opacity=".45"/>'+
+  '<stop offset="100%" stop-color="'+color+'" stop-opacity="0"/></radialGradient></defs>'+
+  '<ellipse cx="60" cy="120" rx="58" ry="80" fill="url(#bl)"/>'+
+  '<g clip-path="url(#gc)">'+
+  '<rect x="20" y="30" width="80" height="160" fill="'+color+'"/>'+
+  '<rect x="20" y="'+(30+h)+'" width="80" height="6" fill="#000" opacity=".12"/>'+
+  '<rect x="20" y="30" width="80" height="'+h+'" fill="#F7F1E4"/>'+
+  '<rect x="20" y="'+(30+h-3)+'" width="80" height="3" fill="#E4DAC6"/>'+bubbles+
+  '<rect x="20" y="30" width="80" height="160" fill="url(#sh)"/></g>'+
+  '<path d="M26 30 L94 30 L86 178 Q85 186 77 186 L43 186 Q35 186 34 178 Z" fill="none" stroke="#4A525C" stroke-width="1.6"/>'+
+  '<ellipse cx="60" cy="30" rx="34" ry="5" fill="none" stroke="#4A525C" stroke-width="1.6"/></svg>';
+}
+
+function radarSVG(data){
+  const keys=Object.keys(data),N=keys.length,RD=76,cx=130,cy=116;
+  const pt=(i,r)=>{const a=Math.PI*2*i/N-Math.PI/2;return[cx+Math.cos(a)*r,cy+Math.sin(a)*r];};
+  let s='<svg viewBox="0 0 260 232" style="width:100%;">';
+  [0.25,0.5,0.75,1].forEach(f=>{
+    s+='<polygon points="'+keys.map((_,i)=>pt(i,RD*f).join(',')).join(' ')+'" fill="none" stroke="#343A42" stroke-width="1"/>';});
+  keys.forEach((_,i)=>{const p=pt(i,RD);s+='<line x1="'+cx+'" y1="'+cy+'" x2="'+p[0]+'" y2="'+p[1]+'" stroke="#343A42"/>';});
+  s+='<polygon points="'+keys.map((k,i)=>pt(i,clamp(data[k],0,10)/10*RD).join(',')).join(' ')+
+     '" fill="#C87137" fill-opacity=".28" stroke="#FFB020" stroke-width="2" stroke-linejoin="round"/>';
+  keys.forEach((k,i)=>{const p=pt(i,clamp(data[k],0,10)/10*RD);s+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.8" fill="#FFB020"/>';});
+  keys.forEach((k,i)=>{const p=pt(i,RD+21);
+    const an=Math.abs(p[0]-cx)<6?'middle':p[0]>cx?'start':'end';
+    s+='<text x="'+p[0]+'" y="'+p[1]+'" text-anchor="'+an+'" font-size="9.5" fill="#8C949E" letter-spacing=".5">'+esc(k.toUpperCase())+'</text>';
+    s+='<text x="'+p[0]+'" y="'+(p[1]+11)+'" text-anchor="'+an+'" font-size="10" fill="#E9E5DC" font-family="monospace">'+data[k].toFixed(1)+'</text>';});
+  return s+'</svg>';
+}
+
+function hopChartHTML(){
+  const boil=R.hops.filter(h=>h.oz>0&&(h.use==='Boil'||h.use==='First Wort'));
+  const late=R.hops.filter(h=>h.oz>0&&(h.use==='Whirlpool'||h.use==='Dry Hop'));
+  let maxOz=0.25; R.hops.forEach(h=>{if(h.oz>maxOz)maxOz=h.oz;});
+  let s='<div style="position:relative;height:96px;border-radius:6px;background:var(--bg);border:1px solid var(--line);">';
+  if(!boil.length)s+='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--dim);">No boil additions</div>';
+  boil.forEach(h=>{
+    const x=clamp((1-h.time/Math.max(R.boilTime,1))*100,0,96);
+    const ht=clamp(h.oz/maxOz*60,8,60);
+    s+='<div style="position:absolute;bottom:24px;left:'+x+'%;">'+
+       '<div style="width:8px;height:'+ht+'px;margin-left:-4px;background:var(--copper);border-radius:2px 2px 0 0;"></div>'+
+       '<div class="mono" style="position:absolute;bottom:'+(ht+2)+'px;left:-5px;font-size:10px;color:var(--led);">'+h.oz+'</div></div>';});
+  s+='<div style="position:absolute;bottom:22px;left:0;right:0;height:1px;background:var(--lineHi);"></div>'+
+     '<div class="mono" style="position:absolute;bottom:3px;left:5px;font-size:11px;color:var(--dim);">'+R.boilTime+' min</div>'+
+     '<div class="mono" style="position:absolute;bottom:3px;right:5px;font-size:11px;color:var(--dim);">flameout</div></div>';
+  if(late.length){
+    s+='<div style="margin-top:6px;">';
+    late.forEach(h=>{s+='<span class="chip" style="color:'+(h.use==='Dry Hop'?'var(--ok)':'var(--led)')+';">'+
+      (h.use==='Dry Hop'?'❄':'🌀')+' '+esc(h.name)+' '+h.oz+'oz / '+h.time+(h.use==='Dry Hop'?'d':'m')+'</span>';});
+    s+='</div>';}
+  return s;
+}
+
+function rangeBarHTML(label,value,lo,hi,fmt,active){
+  const pad=Math.max((hi-lo)*0.75,0.0005);
+  const dMin=lo-pad,dMax=hi+pad;
+  const p=v=>clamp((v-dMin)/(dMax-dMin)*100,0,100);
+  const inR=value>=lo&&value<=hi;
+  const col=!active?'var(--text)':(inR?'var(--ok)':'var(--warn)');
+  return '<div style="margin-bottom:11px;">'+
+    '<div class="lblrow"><span class="lbl">'+label+'</span>'+
+    '<span class="mono" style="font-size:13px;color:'+col+';">'+fmt(value)+
+    (active?'<span style="color:var(--dim);margin-left:8px;font-size:11px;">'+fmt(lo)+'–'+fmt(hi)+'</span>':'')+'</span></div>'+
+    '<div class="bar">'+(active?'<div class="zone" style="left:'+p(lo)+'%;width:'+(p(hi)-p(lo))+'%;"></div>':'')+
+    '<div class="pin" style="left:calc('+p(value)+'% - 1.5px);background:'+col+';"></div></div></div>';
+}
+
+/* ================= ROW RENDERING ================= */
+function renderFermRows(){
+  let s='';
+  R.fermentables.forEach(f=>{
+    s+='<div class="row frow" data-fid="'+f.id+'">'+
+      '<select data-ff="n">'+FERM_OPTS+'</select>'+
+      '<input type="number" step="0.05" min="0" data-ff="lb" value="'+f.lb+'" />'+
+      '<div class="spec" data-spec>'+f.l+'°L<br>'+f.ppg+' ppg</div>'+
+      '<button class="icobtn" data-del="ferm">✕</button></div>';});
+  $('fermRows').innerHTML=s;
+  R.fermentables.forEach(f=>{
+    $('fermRows').querySelector('[data-fid="'+f.id+'"] select').value=f.n;});
+}
+function renderHopRows(){
+  let s='';
+  R.hops.forEach(h=>{
+    s+='<div class="row hrow" data-hid="'+h.id+'">'+
+      '<select data-hf="name">'+HOP_OPTS+'</select>'+
+      '<input class="aa" type="number" step="0.1" min="0" data-hf="alpha" value="'+h.alpha+'" />'+
+      '<input type="number" step="0.05" min="0" data-hf="oz" value="'+h.oz+'" />'+
+      '<input type="number" step="1" min="0" data-hf="time" value="'+h.time+'" />'+
+      '<select data-hf="use">'+USE_OPTS+'</select>'+
+      '<button class="icobtn" data-del="hop">✕</button></div>';});
+  $('hopRows').innerHTML=s;
+  R.hops.forEach(h=>{
+    const row=$('hopRows').querySelector('[data-hid="'+h.id+'"]');
+    row.querySelector('[data-hf="name"]').value=h.name;
+    row.querySelector('[data-hf="use"]').value=h.use;});
+}
+
+/* ================= OUTPUT RENDER ================= */
+function render(){
+  const o=computeAll(),Y=yeast();
+  const st=STYLES.find(s=>s[0]===R.style)||STYLES[0];
+  const active=st[0]!==STYLES[0][0];
+
+  $('ro-og').textContent=grav(o.og);
+  $('ro-fg').textContent=grav(o.fg);
+  $('ro-abv').innerHTML=r2(o.abv,1)+'<small>%</small>';
+  $('ro-ibu').textContent=Math.round(o.ibu);
+  $('ro-srm').innerHTML=r2(o.srm,1)+'<small>SRM</small>';
+  $('ro-srm').style.color=o.srm<3?'var(--led)':o.srmColor;
+  $('ro-bugu').textContent=r2(o.bugu,2);
+
+  $('glass').innerHTML=glassSVG(o.srmColor,12+o.flavor.Body*0.9);
+  $('srmHint').textContent=r2(o.srm,1)+' SRM';
+  $('srmPin').style.left='calc('+((clamp(o.srm,1,40)-1)/39*100)+'% - 5px)';
+  $('ro-cal').innerHTML=Math.round(o.cal12)+'<small>/12oz</small>';
+  $('ro-realatt').innerHTML=r2(o.realAtt,1)+'<small>%</small>';
+
+  $('radar').innerHTML=radarSVG(o.flavor);
+  $('tasting').textContent=tastingNote(o);
+
+  // grist
+  $('gristBar').innerHTML=o.grist.map(g=>'<div style="width:'+g.pct+'%;background:'+g.color+';" title="'+esc(g.name)+'"></div>').join('');
+  $('gristTotal').textContent=r2(o.totalLb,2)+' lb · '+r2(o.totalLb/Math.max(R.batch,0.1),2)+' lb/gal';
+  $('gristLegend').innerHTML=o.grist.slice(0,9).map(g=>
+    '<div class="glegend"><span class="sw" style="background:'+g.color+'"></span>'+
+    '<span class="grow">'+esc(g.name)+'</span>'+
+    '<span class="mono" style="color:var(--dim);">'+g.lb+' lb</span>'+
+    '<span class="mono" style="color:var(--led);width:52px;text-align:right;">'+g.pct.toFixed(1)+'%</span></div>').join('');
+
+  // hops
+  $('hopChart').innerHTML=hopChartHTML();
+  $('hopHint').textContent=Math.round(o.ibu)+' IBU · '+r2(o.aromaPerGal,2)+' aroma index';
+  $('wpHint').textContent=R.whirlpoolTemp+'°F';
+
+  // yeast
+  $('yeastNote').innerHTML=esc(Y.note)+' · <span class="mono">'+Y.att+'% apparent attenuation</span> · <span class="mono">'+Y.lo+'–'+Y.hi+'°F</span>';
+  $('ftHint').textContent=R.fermTemp+'°F';
+  const outLo=R.fermTemp<Y.lo,outHi=R.fermTemp>Y.hi;
+  const fts=$('ftStatus');
+  fts.textContent=outLo?'Below range — sluggish, may stall':outHi?'Above range — fusels and harsh esters':'In range';
+  fts.style.color=(outLo||outHi)?'var(--warn)':'var(--ok)';
+  $('ro-att').innerHTML=r2(o.effAtt,1)+'<small>%</small>';
+  $('ro-madj').innerHTML=(o.mashAdj>=0?'+':'')+r2(o.mashAdj,1)+'<small>pts</small>';
+  $('ro-madj').style.color=o.mashAdj>0?'var(--warn)':'var(--ok)';
+  $('yeastExplain').innerHTML='Mash temperature shifts attenuation up or down from the strain\u2019s published figure. A '+
+    R.mashTemp+'°F rest lands you near <span class="mono" style="color:var(--led);">'+r2(o.effAtt,1)+
+    '%</span>, finishing at <span class="mono" style="color:var(--led);">'+grav(o.fg)+'</span>.';
+
+  // water
+  $('scHint').textContent=(o.scRatio>90?'∞':r2(o.scRatio,2))+' : 1';
+  $('scPin').style.left='calc('+clamp(50+Math.log(clamp(o.scRatio,0.1,10))/Math.LN2*15,0,100)+'% - 2px)';
+  $('ro-ra').innerHTML=Math.round(o.ra)+'<small>ppm</small>';
+  $('ro-ra').style.color=o.ra>60?'var(--warn)':'var(--led)';
+  $('ro-ph').textContent=r2(o.mashPh,2);
+  $('ro-ph').style.color=(o.mashPh>=5.2&&o.mashPh<=5.6)?'var(--ok)':'var(--warn)';
+  renderSalts(o);
+
+  // mash
+  $('mtHint').textContent=R.mashTemp+'°F';
+  document.querySelectorAll('[data-key="mashTemp"]').forEach(el=>{
+    if(el!==document.activeElement) el.value=R.mashTemp;
+  });
+  const ms=$('mashStatus');
+  ms.textContent=R.mashTemp<148?'Beta-amylase dominant — highly fermentable, expect a dry, thin beer.':
+    R.mashTemp>158?'Alpha-amylase dominant — lots of unfermentable dextrin, heavy and sweet.':
+    R.mashTemp<=151?'Fermentable range — crisp finish, moderate body.':
+    'Dextrinous range — fuller body, malt stays on the palate.';
+  ms.style.color=(R.mashTemp>=148&&R.mashTemp<=158)?'var(--ok)':'var(--warn)';
+  $('ro-strikeW').innerHTML=r2(o.strikeW,2)+'<small>gal</small>';
+  $('ro-strikeT').innerHTML=r2(o.strikeTemp,1)+'<small>°F</small>';
+  $('ro-sparge').innerHTML=r2(o.spargeW,2)+'<small>gal</small>';
+  $('ro-absorb').innerHTML=r2(o.absorb,2)+'<small>gal</small>';
+  $('ro-boilvol').innerHTML=r2(o.boilVol,2)+'<small>gal</small>';
+  $('ro-pbg').textContent=grav(o.preBoilGrav);
+  $('mashExplain').innerHTML='Strike temp assumes an ambient-temperature mash tun. On a recirculating rig, preheat the vessel and set the controller to <span class="mono" style="color:var(--led);">'+
+    R.mashTemp+'°F</span> — the loop holds it there rather than drifting down like a direct-fire mash does.';
+
+  // style check
+  $('styleTitle').textContent='Style check — '+st[0];
+  const hits=[o.og>=st[1]&&o.og<=st[2],o.fg>=st[3]&&o.fg<=st[4],o.abv>=st[5]&&o.abv<=st[6],
+              o.ibu>=st[7]&&o.ibu<=st[8],o.srm>=st[9]&&o.srm<=st[10]].filter(Boolean).length;
+  $('styleScore').textContent=active?hits+' / 5 in range':'pick a style above';
+  $('styleBars').innerHTML=
+    rangeBarHTML('OG',o.og,st[1],st[2],grav,active)+
+    rangeBarHTML('FG',o.fg,st[3],st[4],grav,active)+
+    rangeBarHTML('ABV',o.abv,st[5],st[6],v=>r2(v,1)+'%',active)+
+    rangeBarHTML('IBU',o.ibu,st[7],st[8],v=>String(Math.round(v)),active)+
+    rangeBarHTML('SRM',o.srm,st[9],st[10],v=>r2(v,1),active);
+  if(typeof renderMashLog==='function' && $('mlRows')) renderMashLog();
+}
+
+/* ================= SYNC CONTROLS FROM STATE ================= */
+function syncControls(){
+  document.querySelectorAll('[data-key]').forEach(el=>{el.value=R[el.dataset.key];});
+  $('rname').value=R.name;
+  $('style').value=R.style;
+  $('yeastSel').value=R.yeastName;
+  $('waterSel').value=WATER_PRESETS[R.waterPreset]?R.waterPreset:'Custom';
+  document.querySelectorAll('[data-water]').forEach(el=>{el.value=R.water[el.dataset.water];});
+}
+
+/* ================= BUILD STATIC UI ================= */
+$('style').innerHTML=STYLES.map(s=>'<option value="'+esc(s[0])+'">'+esc(s[0])+'</option>').join('');
+$('yeastSel').innerHTML=groupedOpts(YEASTS);
+$('waterSel').innerHTML=Object.keys(WATER_PRESETS).map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')
+  +'<option value="Custom">Custom</option>';
+$('waterSliders').innerHTML=[['ca','Calcium',200],['mg','Magnesium',60],['na','Sodium',150],
+  ['so4','Sulfate',400],['cl','Chloride',300],['hco3','Bicarbonate',300]].map(x=>
+  '<div><div class="lblrow"><span class="lbl">'+x[1]+'</span><span class="hint" id="wh-'+x[0]+'"></span></div>'+
+  '<input type="range" min="0" max="'+x[2]+'" step="1" data-water="'+x[0]+'" /></div>').join('');
+
+function updWaterHints(){['ca','mg','na','so4','cl','hco3'].forEach(k=>{$('wh-'+k).textContent=R.water[k]+' ppm';});}
+
+/* ---- salt additions: ppm added per gram per gallon ---- */
+const SALTS={
+  gypsum:{n:'Gypsum (CaSO₄·2H₂O)',ca:61.5,so4:147.4},
+  cacl2:{n:'Calcium chloride (CaCl₂·2H₂O)',ca:72.0,cl:127.4},
+  epsom:{n:'Epsom salt (MgSO₄·7H₂O)',mg:26.1,so4:103.0},
+  nacl:{n:'Table salt (NaCl)',na:103.9,cl:160.3},
+  soda:{n:'Baking soda (NaHCO₃)',na:72.3,hco3:191.0}
+};
+function solveSalts(w,gal){
+  if(gal<=0) return null;
+  const g={};
+  g.epsom = w.mg*gal/SALTS.epsom.mg;
+  const so4e = g.epsom*SALTS.epsom.so4/gal;
+  g.gypsum = Math.max(0,(w.so4-so4e)*gal/SALTS.gypsum.so4);
+  g.soda = w.hco3*gal/SALTS.soda.hco3;
+  const naS = g.soda*SALTS.soda.na/gal;
+  g.nacl = Math.max(0,(w.na-naS)*gal/SALTS.nacl.na);
+  const clN = g.nacl*SALTS.nacl.cl/gal;
+  g.cacl2 = Math.max(0,(w.cl-clN)*gal/SALTS.cacl2.cl);
+  const got={
+    ca:(g.gypsum*SALTS.gypsum.ca+g.cacl2*SALTS.cacl2.ca)/gal,
+    mg:(g.epsom*SALTS.epsom.mg)/gal,
+    na:(g.nacl*SALTS.nacl.na+g.soda*SALTS.soda.na)/gal,
+    so4:(g.gypsum*SALTS.gypsum.so4+g.epsom*SALTS.epsom.so4)/gal,
+    cl:(g.cacl2*SALTS.cacl2.cl+g.nacl*SALTS.nacl.cl)/gal,
+    hco3:(g.soda*SALTS.soda.hco3)/gal};
+  return {g:g,got:got};
+}
+function renderSalts(o){
+  const gal=(o.strikeW||0)+(o.spargeW||0);
+  $('saltVolHint').textContent=r2(gal,2)+' gal total ('+r2(gal*3.785,1)+' L)';
+  const s=solveSalts(R.water,gal);
+  if(!s){$('saltTable').innerHTML='';$('saltNote').textContent='';return;}
+  const rows=Object.keys(SALTS).filter(k=>s.g[k]>0.05).map(k=>
+    '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);">'+
+    '<span style="font-size:13px;">'+SALTS[k].n+'</span>'+
+    '<span style="font-size:13px;color:var(--led);font-weight:600;">'+r2(s.g[k],2)+' g</span></div>').join('');
+  const ions=[['ca','Ca'],['mg','Mg'],['na','Na'],['so4','SO₄'],['cl','Cl'],['hco3','HCO₃']];
+  const off=ions.filter(i=>Math.abs(s.got[i[0]]-R.water[i[0]])>=3)
+    .map(i=>i[1]+' '+Math.round(s.got[i[0]])+' vs '+R.water[i[0]]+' target');
+  $('saltTable').innerHTML=rows||'<div class="note">No additions needed — target is RO water as-is.</div>';
+  $('saltNote').innerHTML='Weigh on a scale reading to 0.01 g. Dose into the kettle, or split across mash and sparge in proportion to volume.'+
+    (off.length?'<br><br><span style="color:var(--warn);">Closest achievable: '+off.join(', ')+
+    '. Ion targets can\'t all be hit independently — each salt carries two ions.</span>':
+    '<br><br><span style="color:var(--ok);">Profile hit within 3 ppm on every ion.</span>')+
+    '<br><br>Calcium chloride absorbs moisture from the air and clumps; a caked jar weighs heavier than it should.';
+}
+
+/* ================= EVENTS ================= */
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.tp').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); $('tp-'+b.dataset.tab).classList.add('on');
+}));
+
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.key!==undefined){
+    const v=parseFloat(t.value); if(!isNaN(v))R[t.dataset.key]=v; render(); return;}
+  if(t.dataset.water!==undefined){
+    R.water[t.dataset.water]=parseFloat(t.value)||0; R.waterPreset='Custom';
+    $('waterSel').value='Custom'; updWaterHints(); render(); return;}
+  if(t.id==='rname'){R.name=t.value; return;}
+  const fr=t.closest('[data-fid]');
+  if(fr&&t.dataset.ff==='lb'){
+    const f=R.fermentables.find(x=>x.id===fr.dataset.fid);
+    f.lb=Math.max(0,parseFloat(t.value)||0); render(); return;}
+  const hr=t.closest('[data-hid]');
+  if(hr&&t.dataset.hf){
+    const h=R.hops.find(x=>x.id===hr.dataset.hid);
+    h[t.dataset.hf]=Math.max(0,parseFloat(t.value)||0); render(); return;}
+});
+
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.key!==undefined&&t.type==='number'&&(t.min!==''||t.max!=='')){
+    let v=parseFloat(t.value);
+    if(isNaN(v)) v=R[t.dataset.key];
+    if(t.min!=='') v=Math.max(parseFloat(t.min),v);
+    if(t.max!=='') v=Math.min(parseFloat(t.max),v);
+    R[t.dataset.key]=v; t.value=v; render(); return;}
+  if(t.id==='style'){R.style=t.value; render(); return;}
+  if(t.id==='yeastSel'){R.yeastName=t.value; render(); return;}
+  if(t.id==='waterSel'){
+    if(WATER_PRESETS[t.value]){R.waterPreset=t.value;R.water=Object.assign({},WATER_PRESETS[t.value]);
+      document.querySelectorAll('[data-water]').forEach(el=>{el.value=R.water[el.dataset.water];});
+      updWaterHints(); render();} return;}
+  const fr=t.closest('[data-fid]');
+  if(fr&&t.dataset.ff==='n'){
+    const f=R.fermentables.find(x=>x.id===fr.dataset.fid), d=FERMENTABLES.find(x=>x.n===t.value);
+    f.n=d.n; f.ppg=d.ppg; f.l=d.l; f.g=d.g; f.sugar=!!d.sugar;
+    fr.querySelector('[data-spec]').innerHTML=d.l+'°L<br>'+d.ppg+' ppg';
+    render(); return;}
+  const hr=t.closest('[data-hid]');
+  if(hr&&t.dataset.hf==='name'){
+    const h=R.hops.find(x=>x.id===hr.dataset.hid), d=HOPS.find(x=>x.n===t.value);
+    h.name=d.n; h.alpha=d.a;
+    const aa=hr.querySelector('[data-hf="alpha"]'); if(aa)aa.value=d.a;
+    render(); return;}
+  if(hr&&t.dataset.hf==='use'){
+    R.hops.find(x=>x.id===hr.dataset.hid).use=t.value; render(); return;}
+});
+
+/* ---- mash temp log ---- */
+function mashLog(){ if(!Array.isArray(R.mashLog)) R.mashLog=[]; return R.mashLog; }
+function mashLogStats(){
+  const L=mashLog(); if(!L.length) return null;
+  const t=L.map(x=>x.f);
+  const avg=t.reduce((a,b)=>a+b,0)/t.length;
+  return {n:t.length, avg:avg, min:Math.min.apply(null,t), max:Math.max.apply(null,t),
+          spread:Math.max.apply(null,t)-Math.min.apply(null,t), drift:avg-R.mashTemp};
+}
+function renderMashLog(){
+  const L=mashLog().slice().sort((a,b)=>a.m-b.m);
+  let s='';
+  L.forEach(x=>{
+    const d=x.f-R.mashTemp;
+    const col=Math.abs(d)<=1?'var(--ok)':(Math.abs(d)<=3?'var(--warn)':'var(--led)');
+    s+='<div class="row mlrow" data-mlid="'+x.id+'">'+
+       '<span>'+x.m+' min</span>'+
+       '<span>'+r2(x.f,1)+'</span>'+
+       '<span class="dv" style="color:'+col+'">'+(d>=0?'+':'')+r2(d,1)+'</span>'+
+       '<button class="icobtn" data-del="ml">✕</button></div>';});
+  $('mlRows').innerHTML=s||'<div class="note">No readings yet. Log a temp every 10–15 min '+
+    'during the rest — the average is what actually set your wort fermentability, not the setpoint.</div>';
+
+  const st=mashLogStats();
+  $('ro-mlN').textContent   = st? st.n : '—';
+  $('ro-mlAvg').textContent = st? r2(st.avg,1)+'°F' : '—';
+  $('ro-mlRange').textContent = st? r2(st.min,1)+' / '+r2(st.max,1) : '—';
+  $('ro-mlDrift').textContent = st? (st.drift>=0?'+':'')+r2(st.drift,1)+'°F' : '—';
+  $('mlHint').textContent = st? st.n+' logged · avg '+r2(st.avg,1)+'°F' : 'log readings during the rest';
+
+  let e='';
+  if(st){
+    const eA=effAttFor(st.avg), eS=effAttFor(R.mashTemp);
+    e='Average <b>'+r2(st.avg,1)+'°F</b> across '+st.n+' reading'+(st.n>1?'s':'')+
+      ', spread of '+r2(st.spread,1)+'°F. ';
+    if(Math.abs(st.drift)<1) e+='That is right on your '+R.mashTemp+'°F setpoint — conversion went as designed.';
+    else if(st.drift>0) e+='You ran <b>'+r2(st.drift,1)+'°F hot</b>. Alpha-amylase favours longer, '+
+      'unfermentable chains, so expect effective attenuation nearer '+r2(eA,1)+'% instead of '+r2(eS,1)+'% — '+
+      'a higher FG and more body than the recipe called for.';
+    else e+='You ran <b>'+r2(-st.drift,1)+'°F cool</b>. Beta-amylase had the edge, so the wort is more '+
+      'fermentable than designed — effective attenuation nearer '+r2(eA,1)+'% instead of '+r2(eS,1)+'%, '+
+      'meaning a lower FG and a thinner finish.';
+    if(st.spread>4) e+=' A '+r2(st.spread,1)+'°F spread is wide. If several probes are in play, '+
+      'remember only the one sitting in the grain bed reads the actual conversion temperature — '+
+      'coil-output probes read whatever the HERMS is returning, not the mash.';
+  } else {
+    e='Readings feed an average you can push back into the mash temp field, so attenuation and FG '+
+      'are modelled off what the mash actually did rather than what you set it to.';
+  }
+  $('mlExplain').innerHTML=e;
+}
+function effAttFor(mt){
+  const Y=YEASTS.find(y=>y.n===R.yeastName)||YEASTS[0];
+  const mashAdj=clamp((152-mt)*1.3,-9,9);
+  return clamp(Y.att+mashAdj+(R.fermTemp>Y.hi?1.5:0),45,95);
+}
+$('mlAdd').addEventListener('click',()=>{
+  const f=parseFloat($('mlTemp').value);
+  if(!isFinite(f)){ flash('Enter a temperature'); return; }
+  const L=mashLog();
+  let m=parseInt($('mlMin').value,10);
+  if(!isFinite(m)){ m=L.length? Math.max.apply(null,L.map(x=>x.m))+15 : 0; }
+  L.push({id:uid(),m:m,f:f});
+  $('mlTemp').value=''; $('mlMin').value='';
+  renderMashLog(); render();
+});
+$('mlClear').addEventListener('click',()=>{
+  if(!mashLog().length) return;
+  R.mashLog=[]; renderMashLog(); render(); flash('Log cleared');
+});
+$('mlApply').addEventListener('click',()=>{
+  const st=mashLogStats();
+  if(!st){ flash('Nothing logged yet'); return; }
+  R.mashTemp=Math.round(st.avg*10)/10;
+  syncControls(); renderMashLog(); render();
+  flash('Mash temp set to '+r2(st.avg,1)+'°F');
+});
+$('mlTemp').addEventListener('keydown',e=>{ if(e.key==='Enter') $('mlAdd').click(); });
+$('mlMin').addEventListener('keydown',e=>{ if(e.key==='Enter') $('mlAdd').click(); });
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-del]'); if(!b)return;
+  if(b.dataset.del==='ml'){
+    R.mashLog=mashLog().filter(x=>x.id!==b.closest('[data-mlid]').dataset.mlid);
+    renderMashLog(); render(); return;}
+  if(b.dataset.del==='ferm'){
+    R.fermentables=R.fermentables.filter(f=>f.id!==b.closest('[data-fid]').dataset.fid);
+    renderFermRows();}
+  else{
+    R.hops=R.hops.filter(h=>h.id!==b.closest('[data-hid]').dataset.hid);
+    renderHopRows();}
+  render();
+});
+
+$('addFerm').addEventListener('click',()=>{
+  const d=FERMENTABLES[1];
+  R.fermentables.push({id:uid(),n:d.n,ppg:d.ppg,l:d.l,g:d.g,lb:1,sugar:!!d.sugar});
+  renderFermRows(); render();});
+$('addHop').addEventListener('click',()=>{
+  R.hops.push({id:uid(),name:'Cascade',alpha:5.5,oz:0.5,time:15,use:'Boil'});
+  renderHopRows(); render();});
+
+/* ---- save / load ---- */
+function flash(t){const f=$('flash');f.className='flash';f.textContent=t;setTimeout(()=>{f.textContent='';f.className='';},2200);}
+function readSaved(){try{return JSON.parse(localStorage.getItem('brewsim:recipes')||'[]');}catch(e){return[];}}
+function refreshOpen(){
+  const list=readSaved();
+  $('btnOpen').innerHTML='<option value="">Open…</option>'+list.map(r=>'<option value="'+esc(r.name)+'">'+esc(r.name)+'</option>').join('');}
+$('btnSave').addEventListener('click',()=>{
+  try{
+    const list=readSaved().filter(s=>s.name!==R.name);
+    list.push(JSON.parse(JSON.stringify(R)));
+    localStorage.setItem('brewsim:recipes',JSON.stringify(list.slice(-40)));
+    refreshOpen(); flash('Saved “'+R.name+'”');
+  }catch(err){flash('Save failed — storage blocked');}});
+$('btnOpen').addEventListener('change',e=>{
+  const r=readSaved().find(s=>s.name===e.target.value);
+  e.target.value='';
+  if(r){R=Object.assign(defaultRecipe(),r);
+    renderFermRows();renderHopRows();syncControls();updWaterHints();render();flash('Loaded “'+R.name+'”');}});
+$('presets').innerHTML='<option value="">Presets…</option>'+
+  Object.keys(PRESETS).map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('');
+$('presets').addEventListener('change',e=>{
+  const f=PRESETS[e.target.value]; e.target.value='';
+  if(f){R=f(); renderFermRows();renderHopRows();syncControls();updWaterHints();render();flash('Loaded “'+R.name+'”');}});
+$('btnReset').addEventListener('click',()=>{
+  R=defaultRecipe(); renderFermRows();renderHopRows();syncControls();updWaterHints();render();flash('Reset');});
+
+/* ================= BREW SESSION ================= */
+const LBGAL=8.33, CP_W=1.0, CP_GRAIN=0.40, W2BTU=3.412;
+function boilPoint(a){ return 212-1.84*(a/1000); }
+function defaultRig(){return{altitude:4165,ambient:68,hltGal:8,hltWatts:5500,bkWatts:5500,
+  coilFt:25,mltInsulated:true,hltLoss:5.0,bkLoss:9.0,
+  /* steel shell thermal mass, BTU/degF — without this a near-empty vessel teleports */
+  hltShell:2.0,mltShell:2.4,bkShell:2.0, propBand:9};}
+
+let S=null, timer=null;
+
+function newSession(){
+  const o=computeAll(), G=defaultRig();
+  const Y=YEASTS.find(y=>y.n===R.yeastName)||YEASTS[0];
+  return {
+    t:0, phase:'setup', speed:1, done:false, rig:G, tgt:o, baseAtt:Y.att, isLager:Y.lager,
+    bp:boilPoint(G.altitude),
+    hlt:{vol:0,temp:G.ambient,elem:false,sp:168},
+    mlt:{water:0,grain:0,temp:G.ambient,conv:0,enzymes:100,doughed:false},
+    bk:{vol:0,temp:G.ambient,elem:false,boiling:false,vigor:0.5},
+    pump:{on:false,flow:0.9,route:'herms'},
+    bed:{compaction:0,stuck:false},
+    hopsAdded:[], faults:[], log:[],
+    m:{convTempSum:0,convW:0,peakMash:0,tanninMin:0,boilMin:0,hotsideMin:0,evap:0,
+       chillMin:null,o2:0,fermTemp:R.fermTemp||52,fermDays:0,esters:0,scorch:0,strikeMix:null},
+    result:null
+  };
+}
+function sLog(m,k){ S.log.push({t:S.t,msg:m,kind:k||'info'}); if(S.log.length>200)S.log.shift(); }
+function sFault(c,m){ if(S.faults.some(f=>f.code===c))return; S.faults.push({code:c,msg:m}); sLog(m,'fault'); }
+
+function activity(T){
+  if(T<95)return 0;
+  if(T<140)return 0.25+(T-95)/45*0.55;
+  if(T<=158)return 1.0;
+  if(T<=168)return 1.0-(T-158)/10*0.55;
+  if(T<=175)return 0.45-(T-168)/7*0.45;
+  return 0;
+}
+function coilQ(){
+  const P=S.pump,H=S.hlt,M=S.mlt;
+  if(!P.on||P.route!=='herms'||S.bed.stuck||H.vol<0.5||!M.doughed) return 0;
+  const f=Math.max(0.05,P.flow);
+  const eff=Math.min(0.88,0.42+0.22/Math.max(0.4,f)+S.rig.coilFt/500);
+  return f*60*LBGAL*CP_W*(H.temp-M.temp)*eff;
+}
+function sStep(dt){
+  if(S.done)return;
+  if(S.phase==='ferment'){
+    S.t+=dt; S.m.fermDays+=dt/86400;
+    const ideal=S.isLager?52:66;
+    if(S.m.fermTemp>ideal+6) S.m.esters+=(S.m.fermTemp-ideal-6)*dt/86400*1.6;
+    return;
+  }
+  let left=dt; while(left>0){ const d=Math.min(5,left); sTick(d); left-=d; }
+}
+function sTick(dt){
+  const hr=dt/3600, mn=dt/60, G=S.rig, A=G.ambient;
+  S.t+=dt;
+  const H=S.hlt,M=S.mlt,B=S.bk;
+
+  if(H.elem&&H.vol<0.4){ sFault('dryfire','HLT element fired with the coil uncovered — element scorched.'); H.elem=false; }
+  let qH=0;
+  if(H.elem&&H.vol>=0.4){
+    // proportional band: full power far from setpoint, tapering in as it closes
+    const duty=Math.max(0,Math.min(1,(H.sp-H.temp)/G.propBand));
+    qH=G.hltWatts*W2BTU*duty;
+  }
+  const qC=coilQ();
+  {
+    H.temp+=(qH-G.hltLoss*(H.temp-A)-qC)*hr/(H.vol*LBGAL*CP_W+G.hltShell);
+    if(H.temp>S.bp)H.temp=S.bp;
+    if(H.temp<A)H.temp=A;
+  }
+
+  if(M.doughed&&M.water>0){
+    const mass=M.water*LBGAL*CP_W+M.grain*CP_GRAIN+G.mltShell;
+    M.temp+=(qC-(G.mltInsulated?2.2:6.5)*(M.temp-A))*hr/mass;
+    if(S.pump.on&&S.pump.route==='herms'&&(H.temp-M.temp)>28){
+      S.m.hotsideMin+=mn;
+      if(S.m.hotsideMin>6) sFault('coilscorch','HLT running far hotter than the mash — wort scorching at the coil face.');
+    }
+    if(M.temp>168){ M.enzymes=Math.max(0,M.enzymes-(M.temp-168)*0.9*mn); if(M.temp>170)S.m.tanninMin+=mn; }
+    if(M.temp>S.m.peakMash)S.m.peakMash=M.temp;
+    if(S.phase==='mash'||S.phase==='mashout'){
+      const act=activity(M.temp)*(M.enzymes/100);
+      if(act>0&&M.conv<99.9){
+        const dC=(100-M.conv)*(1-Math.exp(-0.0868*act*mn));
+        M.conv+=dC; S.m.convTempSum+=M.temp*dC; S.m.convW+=dC;
+      }
+    }
+    if(S.pump.on){
+      const th=0.9+M.grain*0.06;
+      if(S.pump.flow>th){
+        S.bed.compaction+=(S.pump.flow-th)*mn*3.5;
+        if(S.bed.compaction>100&&!S.bed.stuck){ S.bed.stuck=true;
+          sFault('stuck','Grain bed compacted — you pulled wort faster than it could run. Sparge is stuck.'); }
+      } else S.bed.compaction=Math.max(0,S.bed.compaction-mn*2);
+    }
+  }
+
+  if(B.elem&&B.vol<0.8){ sFault('bkdry','Kettle element fired nearly dry — scorched.'); S.m.scorch++; B.elem=false; }
+  if(B.vol>0.05){
+    let qB=(B.elem&&B.vol>=0.8)?G.bkWatts*W2BTU:0;
+    const loss=G.bkLoss*(B.temp-A);
+    if(B.temp>=S.bp-0.4&&qB>0){
+      B.boiling=true;
+      const ev=Math.max(0,qB*B.vigor-loss)/970/LBGAL*hr;
+      B.vol=Math.max(0.1,B.vol-ev); S.m.evap+=ev; B.temp=S.bp; S.m.boilMin+=mn;
+    } else { B.boiling=false; B.temp+=(qB-loss)*hr/(B.vol*LBGAL*CP_W+G.bkShell); }
+  }
+  if(S.phase==='chill'&&B.vol>0.05){
+    const pitch=S.isLager?54:66;
+    B.temp-=Math.max(0,(B.temp-48))*0.12*mn;
+    if(B.temp>pitch) S.m.chillMin=(S.m.chillMin||0)+mn;   // clock stops once it's pitchable
+  }
+}
+
+/* ---- outcome ---- */
+function sFinish(){
+  const M=S.mlt,B=S.bk;
+  const convTemp=S.m.convW>0?S.m.convTempSum/S.m.convW:R.mashTemp;
+  const lauter=S.bed.stuck?0.72:1.0;
+  const eff=R.efficiency*Math.min(1,M.conv/100)*lauter;
+  let pts=0,mcu=0;
+  (R.fermentables||[]).forEach(f=>{ pts+=f.ppg*f.lb*(f.sugar?1:eff/100); mcu+=f.l*f.lb; });
+  const kettle=Math.max(0.5,B.vol), vol=Math.max(0.5,kettle-(R.trubLoss||0));
+  const og=1+(pts/vol)/1000;
+  const srm=1.4922*Math.pow(mcu/vol,0.6859);
+  let att=S.baseAtt+Math.max(-9,Math.min(9,(152-convTemp)*1.3));
+  if(S.m.esters>3)att+=1.5;
+  if(S.m.o2<0.5)att-=6;
+  att=Math.max(50,Math.min(92,att));
+  const fg=1+((og-1)*1000*(1-att/100))/1000, abv=(og-fg)*131.25;
+  const pre=vol+S.m.evap, bg=1+((og-1)*vol/((vol+pre)/2));
+  let ibu=0;
+  S.hopsAdded.forEach(h=>{
+    let u=1.65*Math.pow(0.000125,bg-1)*(1-Math.exp(-0.04*h.minLeft))/4.15;
+    if(h.use==='Whirlpool')u*=0.35;
+    ibu+=u*h.alpha/100*h.oz*7490/vol;
+  });
+  const n=[];
+  if(M.conv<92)n.push('Conversion stopped at '+M.conv.toFixed(0)+'% — short of target gravity.');
+  if(S.m.peakMash>168)n.push('Mash peaked at '+S.m.peakMash.toFixed(0)+'°F; enzymes took damage.');
+  if(S.m.tanninMin>4)n.push('Held above 170°F for '+S.m.tanninMin.toFixed(0)+' min — husk tannins, drying astringency.');
+  if(S.bed.stuck)n.push('Stuck sparge cost roughly a quarter of your extract.');
+  if(S.m.scorch>0)n.push('Scorched wort — a burnt edge that will not age out.');
+  if(S.m.hotsideMin>6)n.push('Hot-side scorching at the HERMS coil.');
+  if(S.m.boilMin<45&&(R.fermentables||[]).some(f=>/pilsner/i.test(f.n)))
+    n.push('Short boil on a Pilsner grist. Water boils at '+S.bp.toFixed(0)+'°F at your elevation, so DMS needs the full 60–90 min to drive off.');
+  if(S.m.chillMin!==null&&S.m.chillMin>45)n.push('Slow chill ('+S.m.chillMin.toFixed(0)+' min) — soft break, hazier beer.');
+  if(S.m.o2<0.5)n.push('Wort went in under-oxygenated; fermentation stalled high.');
+  if(S.m.esters>3)n.push('Fermented warm — fruity esters and a touch of fusel heat.');
+  const md=convTemp-R.mashTemp;
+  if(md<-3) n.push('Sugar actually got made at '+r2(convTemp,1)+'°F against a '+R.mashTemp+
+    '°F target — that is beta-amylase territory, so the beer finished thinner and drier than designed.');
+  if(md>3) n.push('Sugar actually got made at '+r2(convTemp,1)+'°F against a '+R.mashTemp+
+    '°F target — more unfermentable dextrin than intended, so it finished sweeter and fuller.');
+  // only worth mentioning the dough-in miss if the rest never made it up — a HERMS
+  // that recovers to target has done its job, and flagging it there is just noise
+  if(Math.abs(md)>3&&S.m.strikeMix!==null&&Math.abs(S.m.strikeMix-R.mashTemp)>3)
+    n.push('It started there because you doughed in at '+r2(S.m.strikeMix,1)+'°F — the water was '+
+      (S.m.strikeMix<R.mashTemp?'too cool':'too hot')+' for the grain it had to heat, and the rest never made it back.');
+  const dv=vol-R.batch;
+  if(dv<-0.3) n.push('Boiled down to '+r2(vol,2)+' gal against a '+r2(R.batch,2)+
+    ' gal target — everything concentrated: gravity, color and bitterness all came in high.');
+  if(dv>0.3) n.push('Finished at '+r2(vol,2)+' gal, over the '+r2(R.batch,2)+
+    ' gal target — the beer is diluted and came in under gravity.');
+  const hopsMissed=(R.hops||[]).length-S.hopsAdded.length;
+  if(hopsMissed>0)n.push(hopsMissed+' hop addition'+(hopsMissed>1?'s':'')+' never went in.');
+  if(!n.length)n.push('Clean run. Nothing to apologize for.');
+  S.result={og,fg,abv,ibu,srm,vol,eff,conv:M.conv,convTemp,att,notes:n};
+  S.done=true; S.speed=0; stopTimer();
+  sLog('Batch complete.','good');
+  return S.result;
+}
+
+/* ================= RIG SVG ================= */
+const VT=60, VB=248;
+function rigSVG(){
+  const v=(x,w,id,label)=>`
+    <rect x="${x}" y="${VT}" width="${w}" height="${VB-VT}" rx="7" fill="#0C0E11" stroke="var(--line)" stroke-width="2"/>
+    <rect id="${id}Fill" x="${x+3}" y="${VB-3}" width="${w-6}" height="0" rx="4" fill="var(--copper)" opacity=".55"/>
+    <text x="${x+w/2}" y="${VT-24}" text-anchor="middle" font-size="11" fill="var(--dim)"
+      letter-spacing="1.6">${label}</text>
+    <text id="${id}T" x="${x+w/2}" y="${VT-7}" text-anchor="middle" font-size="17"
+      font-family="var(--mono)" fill="var(--led)">—</text>
+    <text id="${id}V" x="${x+w/2}" y="${VB+16}" text-anchor="middle" font-size="10"
+      font-family="var(--mono)" fill="var(--dim)">—</text>`;
+  return `<svg viewBox="0 0 720 320" style="width:100%;height:auto;display:block;">
+    ${v(30,150,'hlt','HLT')}
+    ${v(285,150,'mlt','MASH TUN')}
+    ${v(540,150,'bk','BOIL KETTLE')}
+
+    <!-- HERMS coil -->
+    <g id="coil" stroke="var(--lineHi)" stroke-width="3" fill="none" opacity=".9">
+      <path d="M60,110 h90 M60,130 h90 M60,150 h90 M60,170 h90"/>
+      <path d="M150,110 q12,10 0,20 M60,130 q-12,10 0,20 M150,150 q12,10 0,20"/>
+    </g>
+    <text x="105" y="196" text-anchor="middle" font-size="9" fill="var(--dim)">HERMS COIL</text>
+
+    <!-- grain bed -->
+    <rect id="mltGrain" x="288" y="${VB-3}" width="144" height="0" fill="#6B4A2B" opacity=".85"/>
+
+    <!-- bubbles -->
+    <g id="bkBub" opacity="0">
+      <circle cx="580" cy="200" r="3" fill="var(--text)" opacity=".5"><animate attributeName="cy" values="235;150" dur="1.4s" repeatCount="indefinite"/></circle>
+      <circle cx="615" cy="215" r="2.5" fill="var(--text)" opacity=".4"><animate attributeName="cy" values="238;150" dur="1.9s" repeatCount="indefinite"/></circle>
+      <circle cx="648" cy="205" r="3.5" fill="var(--text)" opacity=".45"><animate attributeName="cy" values="236;150" dur="1.6s" repeatCount="indefinite"/></circle>
+    </g>
+
+    <!-- recirc loop: MLT bottom -> pump -> coil -> MLT top -->
+    <path id="pRecirc" d="M360,255 V285 H232" stroke="var(--line)" stroke-width="3" fill="none"/>
+    <path id="pRecirc2" d="M208,285 H105 V180" stroke="var(--line)" stroke-width="3" fill="none"/>
+    <path id="pRecirc3" d="M105,100 V44 H360 V56" stroke="var(--line)" stroke-width="3" fill="none"/>
+    <!-- sparge: HLT -> MLT -->
+    <path id="pSparge" d="M180,240 H250 V44" stroke="var(--line)" stroke-width="3" fill="none" opacity=".35"/>
+    <!-- transfer: MLT -> BK -->
+    <path id="pXfer" d="M435,240 H500 V44 H615 V56" stroke="var(--line)" stroke-width="3" fill="none" opacity=".35"/>
+
+    <!-- pump -->
+    <circle cx="220" cy="285" r="17" fill="var(--raised)" stroke="var(--line)" stroke-width="2"/>
+    <g id="rotor"><path d="M220,275 L220,295 M211,280 L229,290 M229,280 L211,290"
+       stroke="var(--dim)" stroke-width="2.5" stroke-linecap="round"/></g>
+    <text x="220" y="313" text-anchor="middle" font-size="9" fill="var(--dim)">PUMP</text>
+
+    <!-- elements -->
+    <path id="eHlt" d="M55,238 h100" stroke="#3A4048" stroke-width="5" stroke-linecap="round"/>
+    <path id="eBk"  d="M565,238 h100" stroke="#3A4048" stroke-width="5" stroke-linecap="round"/>
+  </svg>`;
+}
+function setFill(id,vol,cap){
+  const el=document.getElementById(id); if(!el)return;
+  const h=Math.max(0,Math.min(1,vol/cap))*(VB-VT-6);
+  el.setAttribute('y',VB-3-h); el.setAttribute('height',h);
+}
+function pipe(id,active,color){
+  const el=document.getElementById(id); if(!el)return;
+  el.setAttribute('stroke',active?(color||'var(--copper)'):'var(--line)');
+  el.setAttribute('opacity',active?'1':'.35');
+  el.classList.toggle('flow',!!active);
+}
+
+/* ================= SESSION UI ================= */
+const PHASES={
+  setup:'Setup', heatStrike:'Heating strike water', preheat:'Preheating mash water',
+  mash:'Mash rest', mashout:'Mash out',
+  lauter:'Lauter & sparge', boil:'Boil', whirlpool:'Whirlpool', chill:'Chilling',
+  ferment:'Fermentation', done:'Complete'
+};
+function fmtClock(s){
+  const h=Math.floor(s/3600), m=Math.floor(s%3600/60);
+  if(S&&S.phase==='ferment') return (S.m.fermDays).toFixed(1)+'d';
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+function stopTimer(){ if(timer){clearInterval(timer);timer=null;} }
+function startTimer(){
+  stopTimer();
+  if(!S||S.speed<=0||S.done)return;
+  timer=setInterval(()=>{
+    const dt=S.phase==='ferment'?S.speed*360:S.speed*0.1;   // 1x = real time
+    sStep(dt); renderSession();
+  },100);
+}
+function setSpeed(v){
+  if(!S)return; S.speed=v;
+  document.querySelectorAll('#sSpeed button').forEach(b=>b.classList.toggle('on',+b.dataset.spd===v));
+  startTimer();
+}
+
+function act(label,fn,alt,dis){
+  const b=document.createElement('button');
+  b.className='actbtn'+(alt?' alt':''); b.textContent=label; b.disabled=!!dis;
+  if(!dis) b.addEventListener('click',()=>{fn();renderSession();});
+  return b;
+}
+function renderStep(){
+  const body=$('sStepBody'), acts=$('sActions');
+  acts.innerHTML='';
+  const T=S.tgt, H=S.hlt, M=S.mlt, B=S.bk;
+  const totalW=T.strikeW+T.spargeW;
+  switch(S.phase){
+    case 'setup':
+      body.innerHTML='Two ways to get to '+R.mashTemp+'°F.<br><br>'+
+        '<b>Strike in the HLT</b> — heat '+r2(T.strikeW,2)+' gal to '+r2(T.strikeTemp,1)+
+        '°F, then dump it on the grain. One shot, no recovery time.<br><br>'+
+        '<b>Preheat in the tun</b> — mash water sits in the tun recirculating through the coil, '+
+        'grain goes in once it is up to temp. Steadier, but the grain still drops it and you spend '+
+        'the first part of the rest climbing back.';
+      acts.appendChild(act('Strike in the HLT — '+r2(T.strikeW,2)+' gal',()=>{
+        S.hlt.vol=T.strikeW; S.hlt.sp=Math.round(T.strikeTemp);
+        S.phase='heatStrike'; sLog('Filled HLT with '+r2(T.strikeW,2)+' gal at '+r2(S.hlt.temp,0)+'°F.');
+      }));
+      acts.appendChild(act('Preheat in the tun — recirculate to temp',()=>{
+        S.mlt.water=T.strikeW; S.mlt.grain=0; S.mlt.doughed=true;
+        S.hlt.vol=T.spargeW; S.hlt.sp=R.mashTemp+8; S.hlt.elem=true; S.pump.on=true;
+        S.phase='preheat';
+        sLog('Mash water in the tun, recirculating through the coil. HLT setpoint '+(R.mashTemp+8)+'°F.');
+      },true));
+      break;
+    case 'heatStrike': {
+      const mixT=mixTemp(T.strikeW,H.temp,T.grainLb,68);
+      body.innerHTML='HLT setpoint is '+H.sp+'°F. Calculator says strike at <b>'+r2(T.strikeTemp,1)+'°F</b>.<br>'+
+        'Dough in now and the mash lands at <b style="color:'+(Math.abs(mixT-R.mashTemp)<1.5?'var(--ok)':'var(--warn)')+'">'+
+        r2(mixT,1)+'°F</b> (target '+R.mashTemp+'°F).';
+      acts.appendChild(act('Dough in — '+r2(T.grainLb,2)+' lb grain',()=>{
+        S.mlt.water=T.strikeW; S.mlt.grain=T.grainLb; S.mlt.temp=mixT; S.mlt.doughed=true;
+        // HLT is drained into the tun and refilled with cold sparge water
+        S.hlt.vol=T.spargeW; S.hlt.temp=S.rig.ambient; S.hlt.sp=R.mashTemp+2;
+        S.hlt.elem=true; S.pump.on=false; S.phase='mash';
+        S.m.strikeMix=mixT;
+        sLog('Doughed in at '+r2(mixT,1)+'°F. HLT refilled with '+r2(T.spargeW,2)+' gal cold sparge water.',
+          Math.abs(mixT-R.mashTemp)<1.5?'good':'fault');
+      },false,H.temp<100));
+      break;
+    }
+    case 'preheat': {
+      const land=mixTemp(T.strikeW,M.temp,T.grainLb,68);
+      const ready=Math.abs(land-R.mashTemp)<1.5;
+      body.innerHTML='Tun water is at <b>'+r2(M.temp,1)+'°F</b>, HLT at '+r2(H.temp,1)+
+        '°F (setpoint '+H.sp+'°F). Coil is submerged and the loop is closed, so both vessels track together.'+
+        '<br><br>Add '+r2(T.grainLb,2)+' lb of grain now and the mash lands at <b style="color:'+
+        (ready?'var(--ok)':'var(--warn)')+'">'+r2(land,1)+'°F</b> (target '+R.mashTemp+'°F).'+
+        '<br><br><span class="hint">Grain at room temperature always pulls the mash down. Aim to be about '+
+        '8°F above target when it goes in — that is why the setpoint defaults to '+(R.mashTemp+8)+'°F.</span>';
+      acts.appendChild(act('Add grain — '+r2(T.grainLb,2)+' lb',()=>{
+        S.mlt.grain=T.grainLb; S.mlt.temp=land; S.hlt.sp=R.mashTemp; S.phase='mash';
+        S.m.strikeMix=land;
+        sLog('Grain in at '+r2(M.temp,1)+'°F water — mash landed at '+r2(land,1)+'°F. HLT setpoint to '+
+          R.mashTemp+'°F.',Math.abs(land-R.mashTemp)<1.5?'good':'fault');
+      },false,M.temp<R.mashTemp-2));
+      break;
+    }
+    case 'mash': {
+      const drift=H.temp-R.mashTemp;
+      let warn='';
+      if(H.temp<R.mashTemp-8) warn='<div style="margin-top:8px;color:var(--led);">HLT is cold sparge water at '+
+        r2(H.temp,0)+'°F. Fire the element to bring it up to the setpoint, or the coil will pull heat '+
+        '<em>out</em> of your mash.</div>';
+      if(S.pump.on&&drift>6) warn='<div style="margin-top:8px;color:var(--warn);">HLT is '+r2(drift,0)+
+        '°F above your mash target. Recirculating now will drag the mash up with it — drop the setpoint '+
+        'and let the HLT coast down, or stop the pump until it does.</div>';
+      else if(!S.pump.on&&M.doughed) warn='<div style="margin-top:8px;color:var(--led);">Pump is off — '+
+        'the mash is losing about 10°F an hour to the room at this batch size.</div>';
+      body.innerHTML='Recirculate to hold '+R.mashTemp+'°F. The HLT setpoint drives the mash through the coil, '+
+        'so set it a few degrees above target, not twenty. Conversion '+r2(M.conv,0)+'%, '+
+        'weighted average '+(S.m.convW>0?r2(S.m.convTempSum/S.m.convW,1)+'°F':'—')+'.'+warn;
+      acts.appendChild(act('Mash out — raise to 168°F',()=>{
+        S.hlt.sp=172; S.phase='mashout'; sLog('Mash out — HLT setpoint 172°F.');
+      },true));
+      if(M.conv<80&&M.enzymes<25) warn+='<div style="margin-top:8px;color:var(--warn);">Enzymes are spent and '+
+        'conversion has stalled at '+r2(M.conv,0)+'%. Nothing more will convert — you can run it off, but the '+
+        'gravity is what it is.</div>';
+      acts.appendChild(act('Begin lauter',()=>{ S.phase='lauter'; sLog('Starting lauter at '+r2(M.conv,0)+'% conversion.',
+        M.conv<80?'fault':'info'); }));
+      break;
+    }
+    case 'mashout':
+      body.innerHTML='Raising to 168°F to lock the sugar profile and thin the wort for runoff. '+
+        'Do not sit above 170°F — that is where husk tannins start coming out.';
+      acts.appendChild(act('Begin lauter',()=>{ S.phase='lauter'; sLog('Starting lauter.'); }));
+      break;
+    case 'lauter':
+      body.innerHTML='Vorlauf until the runnings clear, then sparge with the '+r2(T.spargeW,2)+' gal in the HLT. '+
+        'Target pre-boil is '+r2(T.boilVol,2)+' gal.'+(S.bed.stuck?' <span style="color:var(--warn)">The bed is stuck — runoff is badly reduced.</span>':'');
+      acts.appendChild(act('Run off & sparge to kettle',()=>{
+        const yield_=S.bed.stuck?0.78:1;
+        S.bk.vol=T.boilVol*yield_; S.bk.temp=Math.min(170,S.mlt.temp);
+        S.hlt.vol=0; S.hlt.elem=false; S.mlt.doughed=false; S.pump.on=false;
+        S.phase='boil'; S.bk.elem=true;
+        sLog('Collected '+r2(S.bk.vol,2)+' gal pre-boil.',S.bed.stuck?'fault':'good');
+      }));
+      break;
+    case 'boil': {
+      const rem=Math.max(0,R.boilTime-S.m.boilMin);
+      body.innerHTML=B.boiling
+        ? 'Boiling at '+r2(S.bp,0)+'°F — <b>'+r2(rem,0)+' min</b> left of a '+R.boilTime+' min boil. '+
+          'Kettle is down to '+r2(B.vol,2)+' gal.'
+        : 'Heating to boil. At '+r2(S.rig.altitude,0)+' ft your water boils at '+r2(S.bp,0)+'°F, not 212.';
+      acts.appendChild(act('Flameout',()=>{
+        S.bk.elem=false; S.phase='whirlpool'; sLog('Flameout at '+r2(S.bk.vol,2)+' gal.');
+      },true,S.m.boilMin<5));
+      break;
+    }
+    case 'whirlpool':
+      body.innerHTML='Whirlpool to cone the trub and cold break. Any whirlpool hops go in now, while the wort '+
+        'is still above 170°F but off the boil.';
+      acts.appendChild(act('Start chilling',()=>{ S.phase='chill'; sLog('Chiller on.'); }));
+      break;
+    case 'chill':
+      body.innerHTML='Chilling to pitching temperature. You are at <b>'+r2(B.temp,1)+'°F</b>, pitching for '+
+        (S.isLager?'a lager at 52°F':'an ale at 66°F')+'. Fast is better — a slow chill leaves haze.';
+      acts.appendChild(act('Oxygenate & pitch yeast',()=>{
+        S.m.o2=1; S.m.pitchTemp=S.bk.temp; S.phase='ferment';
+        sLog('Pitched at '+r2(S.bk.temp,1)+'°F, wort oxygenated.','good');
+      },false,B.temp>(S.isLager?58:70)));
+      acts.appendChild(act('Pitch without oxygenating',()=>{
+        S.m.o2=0; S.m.pitchTemp=S.bk.temp; S.phase='ferment';
+        sLog('Pitched without oxygen.','fault');
+      },true,B.temp>(S.isLager?58:70)));
+      break;
+    case 'ferment':
+      body.innerHTML='Day '+r2(S.m.fermDays,1)+'. Holding <b>'+r2(S.m.fermTemp,0)+'°F</b>. '+
+        (S.isLager?'A lager wants '+r2(S.m.fermTemp,0)+'°F for two weeks, then a diacetyl rest and a long cold conditioning.'
+                  :'Warm fermentation makes esters — mind the temperature.')+
+        '<div style="margin-top:10px;"><div class="lblrow"><span class="lbl">Fermentation temp</span>'+
+        '<span class="hint">'+r2(S.m.fermTemp,0)+'°F</span></div>'+
+        '<input type="range" id="rFerm" min="45" max="78" step="1" value="'+S.m.fermTemp+'"></div>';
+      const rf=$('rFerm');
+      if(rf) rf.addEventListener('input',e=>{ S.m.fermTemp=+e.target.value; renderSession(); });
+      acts.appendChild(act('Package & evaluate',()=>{ sFinish(); },false,S.m.fermDays<3));
+      break;
+    case 'done':
+      body.innerHTML='Batch complete.'; break;
+  }
+}
+function mixTemp(wGal,wT,grainLb,gT){
+  const mw=wGal*LBGAL*CP_W, mg=grainLb*CP_GRAIN;
+  return (mw*wT+mg*gT)/(mw+mg);
+}
+
+function renderHopButtons(){
+  const blk=$('hopBlk'), box=$('sHops');
+  if(!S||(S.phase!=='boil'&&S.phase!=='whirlpool')){ blk.style.display='none'; return; }
+  blk.style.display='block';
+  const rem=Math.max(0,R.boilTime-S.m.boilMin);
+  box.innerHTML='';
+  (R.hops||[]).forEach((h,i)=>{
+    const added=S.hopsAdded.find(a=>a.idx===i);
+    const row=document.createElement('div');
+    row.className='hopbtn'+(added?' done':'');
+    const due=h.use==='Whirlpool'?'whirlpool':'at '+h.time+' min';
+    row.innerHTML='<span>'+esc(h.name)+' — '+r2(h.oz,2)+' oz, '+due+
+      (added?' <span style="color:var(--ok)">✓ in at '+r2(added.minLeft,0)+'</span>':'')+'</span>';
+    if(!added){
+      const b=document.createElement('button');
+      const dueNow=h.use==='Whirlpool'?S.phase==='whirlpool':Math.abs(rem-h.time)<3;
+      if(dueNow){ b.style.background='var(--copper)'; b.style.borderColor='var(--copper)'; b.style.color='#14100C'; }
+      b.textContent='Add';
+      b.addEventListener('click',()=>{
+        S.hopsAdded.push({idx:i,oz:h.oz,alpha:h.alpha,use:h.use,
+          minLeft:h.use==='Whirlpool'?0:rem});
+        sLog('Added '+r2(h.oz,2)+' oz '+h.name+' with '+r2(rem,0)+' min left.');
+        renderSession();
+      });
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  });
+}
+
+function renderResult(){
+  const p=$('sResult');
+  if(!S.result){ p.style.display='none'; return; }
+  const r=S.result, T=S.tgt;
+  const row=(k,tv,av,d,fmt)=>{
+    const off=Math.abs(av-tv)>d, f=fmt||(x=>x);
+    return '<div>'+k+'</div><div style="color:var(--dim)">'+f(tv)+'</div>'+
+      '<div style="color:'+(off?'var(--warn)':'var(--ok)')+'">'+f(av)+'</div>'+
+      '<div class="hint">'+(off?'off':'on target')+'</div>';
+  };
+  p.style.display='block';
+  p.innerHTML='<div class="lbl" style="margin-bottom:12px;">Result vs. recipe</div>'+
+    '<div class="cmp"><div class="hd">Metric</div><div class="hd">Target</div><div class="hd">Actual</div><div class="hd"></div>'+
+    row('OG',T.og,r.og,0.004,x=>r2(x,3))+
+    row('FG',T.fg,r.fg,0.003,x=>r2(x,3))+
+    row('ABV',T.abv,r.abv,0.4,x=>r2(x,2)+'%')+
+    row('IBU',T.ibu,r.ibu,2.5,x=>r2(x,1))+
+    row('SRM',T.srm,r.srm,1.2,x=>r2(x,1))+
+    row('Efficiency',R.efficiency,r.eff,3,x=>r2(x,0)+'%')+
+    row('Volume',R.batch,r.vol,0.3,x=>r2(x,2)+' gal')+
+    '</div>'+
+    '<div class="hint" style="margin-top:12px;line-height:1.6;">Conversion reached '+r2(r.conv,0)+
+    '% at a weighted average of '+r2(r.convTemp,1)+'°F — that average, not the number on the controller, '+
+    'is what set your fermentability.</div>'+
+    '<div style="margin-top:14px;">'+r.notes.map(n=>
+      '<div style="padding:6px 0;border-top:1px solid var(--line);font-size:12px;line-height:1.55;">• '+esc(n)+'</div>').join('')+'</div>';
+}
+
+function renderSession(){
+  if(!S)return;
+  const H=S.hlt,M=S.mlt,B=S.bk,T=S.tgt;
+  $('sClock').textContent=fmtClock(S.t);
+  $('sPhase').textContent=PHASES[S.done?'done':S.phase];
+  $('sRigHint').textContent=S.rig.altitude+' ft · boils at '+r2(S.bp,0)+'°F · '+
+    (S.rig.hltWatts/1000)+' kW elements';
+
+  setFill('hltFill',H.vol,S.rig.hltGal);
+  setFill('mltFill',M.doughed?M.water:0,3);
+  setFill('bkFill',B.vol,7);
+  const gb=document.getElementById('mltGrain');
+  if(gb){ const gh=M.doughed?Math.min(70,M.grain*9):0; gb.setAttribute('y',VB-3-gh); gb.setAttribute('height',gh); }
+  document.getElementById('hltT').textContent=r2(H.temp,1)+'°';
+  document.getElementById('mltT').textContent=M.doughed?r2(M.temp,1)+'°':'—';
+  document.getElementById('bkT').textContent=B.vol>0.1?r2(B.temp,1)+'°':'—';
+  document.getElementById('hltV').textContent=r2(H.vol,2)+' gal';
+  document.getElementById('mltV').textContent=M.doughed?r2(M.water,2)+' gal · '+r2(M.grain,2)+' lb':'empty';
+  document.getElementById('bkV').textContent=B.vol>0.1?r2(B.vol,2)+' gal':'empty';
+  document.getElementById('bkBub').setAttribute('opacity',B.boiling?'1':'0');
+  document.getElementById('eHlt').setAttribute('stroke',H.elem?'var(--warn)':'#3A4048');
+  document.getElementById('eBk').setAttribute('stroke',B.elem?'var(--warn)':'#3A4048');
+  document.getElementById('coil').setAttribute('stroke',
+    S.pump.on&&S.pump.route==='herms'?'var(--copper)':'var(--lineHi)');
+  const rec=S.pump.on&&M.doughed&&!S.bed.stuck;
+  pipe('pRecirc',rec); pipe('pRecirc2',rec); pipe('pRecirc3',rec);
+  pipe('pSparge',S.phase==='lauter');
+  pipe('pXfer',S.phase==='lauter');
+  document.getElementById('rotor').classList.toggle('rotor',S.pump.on);
+
+  $('ledHlt').className='led'+(H.elem?' hot':'');
+  $('ledBk').className='led'+(B.elem?' hot':'');
+  $('ledPump').className='led'+(S.pump.on?(S.bed.stuck?' hot':' on'):'');
+  $('tHlt').textContent=H.elem?'ON':'OFF'; $('tHlt').className='tgl'+(H.elem?' hot':'');
+  $('tBk').textContent=B.elem?'ON':'OFF';  $('tBk').className='tgl'+(B.elem?' hot':'');
+  $('tPump').textContent=S.pump.on?'ON':'OFF'; $('tPump').className='tgl'+(S.pump.on?' on':'');
+  $('rHltSp').value=H.sp; $('hHltSp').textContent=H.sp+'°F';
+  $('rFlow').value=S.pump.flow; $('hFlow').textContent=r2(S.pump.flow,1)+' gal/min';
+  $('rVigor').value=B.vigor; $('hVigor').textContent=Math.round(B.vigor*100)+'% power';
+  const bedPct=Math.min(100,S.bed.compaction);
+  $('bedHint').innerHTML=S.bed.stuck?'<span style="color:var(--warn)">Bed stuck — restart to recover.</span>'
+    :'Grain bed compaction '+r2(bedPct,0)+'%'+(bedPct>50?' <span style="color:var(--led)">— ease off</span>':'');
+
+  $('iConv').innerHTML=r2(M.conv,0)+'<small>%</small>';
+  $('iEnz').innerHTML=r2(M.enzymes,0)+'<small>%</small>';
+  $('iVol').innerHTML=r2(B.vol,2)+'<small>gal</small>';
+  $('iCT').innerHTML=(S.m.convW>0?r2(S.m.convTempSum/S.m.convW,1):'—')+'<small>°F</small>';
+  $('iBoil').innerHTML=r2(S.m.boilMin,0)+'<small>min</small>';
+  $('iBp').innerHTML=r2(S.bp,0)+'<small>°F</small>';
+  $('iEnz').style.color=M.enzymes<80?'var(--warn)':'var(--led)';
+  $('iNote').textContent=S.m.convW>0
+    ? 'Conversion temp is the weighted average of where sugar actually got made — it sets fermentability, not the controller reading.'
+    : 'Conversion has not started yet.';
+
+  $('sHint').innerHTML=S.faults.length
+    ? '<span style="color:var(--warn)">'+S.faults.map(f=>esc(f.msg)).join(' ')+'</span>'
+    : 'Adjust the rig as you go. Everything you do here feeds the final numbers.';
+
+  $('sLog').innerHTML=S.log.slice().reverse().map(l=>
+    '<div><span class="tm">'+fmtLogT(l.t)+'</span><span class="'+(l.kind==='fault'?'fault':l.kind==='good'?'good':'')+'">'+
+    esc(l.msg)+'</span></div>').join('');
+
+  renderStep(); renderHopButtons(); renderResult();
+}
+function fmtLogT(s){ const h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+
+/* ---- skip step ---- */
+function skipStep(){
+  if(!S||S.done)return;
+  let guard=0;
+  const p=S.phase;
+  if(p==='heatStrike'){ while(S.hlt.temp<S.hlt.sp-1&&guard++<20000) sStep(30); }
+  else if(p==='preheat'){ while(S.mlt.temp<S.hlt.sp-1.5&&guard++<20000) sStep(30); }
+  else if(p==='mash'){
+    let last=-1, flat=0;
+    while(S.mlt.conv<99&&guard++<20000){
+      sStep(30);
+      if(S.mlt.conv-last<0.001){ if(++flat>40) break; } else flat=0;   // stalled: enzymes gone
+      last=S.mlt.conv;
+    }
+  }
+  else if(p==='mashout'){ while(S.mlt.temp<166&&guard++<20000) sStep(30); }
+  else if(p==='boil'){
+    while(S.m.boilMin<R.boilTime&&guard++<20000){
+      sStep(30);
+      const rem=Math.max(0,R.boilTime-S.m.boilMin);
+      (R.hops||[]).forEach((h,i)=>{
+        if(h.use!=='Whirlpool'&&!S.hopsAdded.find(a=>a.idx===i)&&rem<=h.time){
+          S.hopsAdded.push({idx:i,oz:h.oz,alpha:h.alpha,use:h.use,minLeft:rem});
+          sLog('Added '+r2(h.oz,2)+' oz '+h.name+' with '+r2(rem,0)+' min left.');
+        }});
+    }
+  }
+  else if(p==='chill'){ while(S.bk.temp>(S.isLager?54:66)&&guard++<20000) sStep(30); }
+  else if(p==='ferment'){ while(S.m.fermDays<14&&guard++<20000) sStep(3600); }
+  renderSession();
+}
+
+/* ---- wiring ---- */
+function initSession(){ S=newSession(); $('rigWrap').innerHTML=rigSVG(); setSpeed(0); renderSession(); }
+$('mDesign').addEventListener('click',()=>{
+  document.body.classList.remove('session','brewery','carb');
+  $('mShop').classList.remove('on'); $('mCarb').classList.remove('on');
+  $('mDesign').classList.add('on'); $('mBrew').classList.remove('on'); setSpeed(0);
+});
+$('mBrew').addEventListener('click',()=>{
+  document.body.classList.remove('brewery','carb'); document.body.classList.add('session');
+  $('mShop').classList.remove('on'); $('mCarb').classList.remove('on');
+  $('mBrew').classList.add('on'); $('mDesign').classList.remove('on');
+  if(!S) initSession(); else renderSession();
+});
+$('sSpeed').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setSpeed(+b.dataset.spd); });
+$('sSkip').addEventListener('click',skipStep);
+$('sRestart').addEventListener('click',()=>{ stopTimer(); initSession(); flash('Brew day reset'); });
+$('tHlt').addEventListener('click',()=>{ S.hlt.elem=!S.hlt.elem;
+  sLog('HLT element '+(S.hlt.elem?'on':'off')+'.'); renderSession(); });
+$('tBk').addEventListener('click',()=>{ S.bk.elem=!S.bk.elem;
+  sLog('Kettle element '+(S.bk.elem?'on':'off')+'.'); renderSession(); });
+$('tPump').addEventListener('click',()=>{ S.pump.on=!S.pump.on;
+  sLog('Pump '+(S.pump.on?'running':'stopped')+'.'); renderSession(); });
+$('rHltSp').addEventListener('input',e=>{ S.hlt.sp=+e.target.value; renderSession(); });
+$('rFlow').addEventListener('input',e=>{ S.pump.flow=+e.target.value; renderSession(); });
+$('rVigor').addEventListener('input',e=>{ S.bk.vigor=+e.target.value; renderSession(); });
+
+/* ================= BREWERY / SCALE / COST ================= */
+const BBL=31;   // US beer barrel, gallons
+
+/* Equipment profiles. Efficiency climbs with scale; boil-off becomes a
+   percentage of volume rather than a fixed rate once the kettle is large. */
+const SCALES={
+  pilot:  {n:'Pilot — 3.5 gal',  gal:3.5,   eff:72, boilPctHr:null, boilGalHr:1.0, loss:0.25, pkgLoss:3.0},
+  half:   {n:'½ BBL — 15.5 gal', gal:15.5,  eff:74, boilPctHr:8.0,  loss:0.9,  pkgLoss:4.0},
+  one:    {n:'1 BBL — 31 gal',   gal:31,    eff:76, boilPctHr:7.0,  loss:1.5,  pkgLoss:4.0},
+  three:  {n:'3.5 BBL — 108 gal',gal:108.5, eff:78, boilPctHr:5.5,  loss:4.0,  pkgLoss:4.0},
+  seven:  {n:'7 BBL — 217 gal',  gal:217,   eff:80, boilPctHr:4.5,  loss:7.0,  pkgLoss:3.5},
+  ten:    {n:'10 BBL — 310 gal', gal:310,   eff:81, boilPctHr:4.0,  loss:9.0,  pkgLoss:3.5},
+  fifteen:{n:'15 BBL — 465 gal', gal:465,   eff:82, boilPctHr:4.0,  loss:12.0, pkgLoss:3.0},
+  custom: {n:'Custom batch size…', gal:5, eff:72, boilPctHr:8.0, loss:0.4, pkgLoss:3.5}
+};
+
+/* Resolve a scale key to its parameters. 'custom' is read live from BR so the
+   user's own batch size, efficiency and losses drive every downstream number. */
+function scaleDef(key){
+  if(key!=='custom') return SCALES[key];
+  const gal=Math.max(0.5,+BR.cGal||5);
+  return {n:'Custom — '+r2(gal,2)+' gal ('+r2(gal/BBL,2)+' BBL)',
+    gal:gal,
+    eff:clamp(+BR.cEff||72,30,95),
+    boilPctHr:Math.max(0,BR.cBoil==null?8:+BR.cBoil),
+    loss:Math.max(0,BR.cLoss==null?0.4:+BR.cLoss),
+    pkgLoss:Math.max(0,BR.cPkg==null?3.5:+BR.cPkg)};
+}
+
+/* Default ingredient pricing by grist role — every line is editable. */
+const PRICE_DEFAULT={Base:1.05,Crystal:1.75,Roast:1.90,Adjunct:1.30,Specialty:1.65,Sugar:1.20};
+const PACKAGES={
+  half:  {n:'½ BBL keg',      gal:15.5,  unit:'keg'},
+  sixth: {n:'⅙ BBL sixtel',   gal:5.167, unit:'keg'},
+  c12:   {n:'Case, 24×12 oz', gal:2.25,  unit:'case'},
+  c192:  {n:'Case, 12×19.2 oz',gal:1.8,  unit:'case'},
+  c16:   {n:'Case, 24×16 oz', gal:3.0,   unit:'case'}
+};
+
+let BR=null;
+function brDefaults(){return{
+  scale:'pilot', pkg:'half', price:180, co2:2.55, serveTemp:38,
+  prices:{}, hopPrice:{}, yeastCost:6.0, miscGal:0.15,
+  overhead:0, refracOB:'', refracAB:'', hydSG:'', hydT:'',
+  measPre:'', measVol:'',
+  cGal:5, cEff:72, cBoil:8.0, cLoss:0.4, cPkg:3.5
+};}
+function brLoad(){
+  try{ BR=Object.assign(brDefaults(),JSON.parse(localStorage.getItem('brewsim:brewery')||'{}')); }
+  catch(e){ BR=brDefaults(); }
+}
+function brSave(){ try{ localStorage.setItem('brewsim:brewery',JSON.stringify(BR)); }catch(e){} }
+
+function plato(sg){ return -616.868+1111.14*sg-630.272*sg*sg+135.997*sg*sg*sg; }
+
+/* ---- 1. SCALE-UP ---------------------------------------------------- */
+function scaleRecipe(key){
+  const P=scaleDef(key), o=computeAll();
+  const volRatio=P.gal/R.batch;
+  const effRatio=R.efficiency/P.eff;          // better efficiency = less grain
+  const gf=volRatio*effRatio;                 // grain scale factor
+  const ferm=(R.fermentables||[]).map(f=>({n:f.n,g:f.g,lb:f.lb*(f.sugar?volRatio:gf),ppg:f.ppg,l:f.l,sugar:f.sugar}));
+  const hops=(R.hops||[]).map(hp=>({name:hp.name,oz:hp.oz*volRatio,time:hp.time,use:hp.use,alpha:hp.alpha}));
+  const grainLb=ferm.reduce((a,f)=>a+f.lb,0);
+  const postBoil=P.gal+P.loss;
+  const boilOff=P.boilPctHr!=null ? postBoil*(P.boilPctHr/100)*(R.boilTime/60) : P.boilGalHr*(R.boilTime/60);
+  const preBoil=postBoil+boilOff;
+  const absorb=grainLb*0.125;
+  const totalW=preBoil+absorb;
+  return {P,ferm,hops,grainLb,preBoil,postBoil,boilOff,absorb,totalW,gf,volRatio,
+    bbl:P.gal/BBL, og:o.og, srm:o.srm, ibu:o.ibu, abv:o.abv};
+}
+
+/* ---- 2. COST -------------------------------------------------------- */
+function priceFor(f){
+  if(BR.prices[f.n]!=null) return BR.prices[f.n];
+  return PRICE_DEFAULT[f.g]!=null?PRICE_DEFAULT[f.g]:1.30;
+}
+function hopPriceFor(name){ return BR.hopPrice[name]!=null?BR.hopPrice[name]:2.00; }
+
+function costOf(sc){
+  let grain=0; sc.ferm.forEach(f=>{ grain+=f.lb*priceFor(f); });
+  let hop=0;   sc.hops.forEach(hp=>{ hop+=hp.oz*hopPriceFor(hp.name); });
+  const pitch=pitchRate(sc);
+  const yeast=pitch.packs*BR.yeastCost;
+  const misc=sc.P.gal*BR.miscGal;
+  const total=grain+hop+yeast+misc+(+BR.overhead||0);
+  const bbl=sc.P.gal/BBL;
+  const sold=sc.P.gal*(1-sc.P.pkgLoss/100);
+  return {grain,hop,yeast,misc,overhead:+BR.overhead||0,total,
+    perBbl:total/bbl, perGal:total/sc.P.gal, perGalSold:total/sold,
+    per12:total/sold/128*12, perPint:total/sold/8, sold};
+}
+
+/* ---- 3. PACKAGING YIELD --------------------------------------------- */
+function yieldOf(sc){
+  const sold=sc.P.gal*(1-sc.P.pkgLoss/100);
+  const out={};
+  Object.keys(PACKAGES).forEach(k=>{
+    const p=PACKAGES[k];
+    out[k]={whole:Math.floor(sold/p.gal), exact:sold/p.gal, rem:(sold%p.gal)};
+  });
+  return {sold,lost:sc.P.gal-sold,out};
+}
+
+/* ---- 4. MARGIN ------------------------------------------------------ */
+function marginOf(sc,cost,y){
+  const p=PACKAGES[BR.pkg], units=y.out[BR.pkg].exact;
+  const costPerUnit=cost.total/Math.max(0.0001,units);
+  const rev=units*BR.price;
+  const gross=rev-cost.total;
+  const pct=rev>0?gross/rev*100:0;
+  const be=units>0?cost.total/units:0;
+  return {p,units,costPerUnit,rev,gross,pct,be};
+}
+
+/* ---- 5. YEAST PITCH RATE -------------------------------------------- */
+function pitchRate(sc){
+  const Y=YEASTS.find(y=>y.n===R.yeastName)||YEASTS[0];
+  const o=computeAll();
+  const P=plato(o.og);
+  const rate=Y.lager?1.5:0.75;                       // million cells / mL / °P
+  const mL=sc.P.gal*3785.41;
+  const cells=rate*mL*P/1000;                        // billion cells
+  const G_PER_PACK=11.5, B_PER_G=20;                 // 11.5 g sachet ≈ 230 B viable cells
+  const grams=cells/B_PER_G;
+  const packs=Math.max(1,Math.ceil(grams/G_PER_PACK));
+  return {isLager:Y.lager,rate,plato:P,cells,packs,grams,strain:Y.n,
+    note:Y.lager?'Lagers want double the pitch of an ale at the same gravity.'
+                :'Ale rate — half what the same gravity would need as a lager.',
+    warn:Y.lager?'Under-pitching a lager is the fastest way to a stalled, sulfury batch.'
+                :'Over-pitching an ale strips the esters the strain is there to make.'};
+}
+
+/* ---- 6. FERMENTATION SCHEDULE --------------------------------------- */
+/* The recipe's fermTemp slider is independent of the strain, so a recipe built
+   around a lager and then switched to an ale still carries a 52°F setting.
+   Everything downstream uses the corrected temperature, and says when it moved. */
+function fermPlan(){
+  const Y=YEASTS.find(y=>y.n===R.yeastName)||YEASTS[0];
+  const set=+R.fermTemp;
+  const temp=clamp(isNaN(set)?Y.lo:set,Y.lo,Y.hi);
+  return {Y:Y,set:set,temp:Math.round(temp),lager:Y.lager,
+    below:set<Y.lo, above:set>Y.hi, inRange:set>=Y.lo&&set<=Y.hi};
+}
+function schedule(){
+  const fp=fermPlan(), Y=fp.Y, lager=Y.lager, F=fp.temp;
+  const kveik=/Kveik/i.test(Y.g||'');
+  const wild=/Wild|Sour|Mixed/i.test(Y.g||'');
+  let steps;
+  if(lager){
+    steps=[
+      {n:'Primary',       d:12, t:F+'°F',        why:'Bulk of attenuation.'},
+      {n:'Diacetyl rest', d:3,  t:(F+10)+'°F',   why:'Warm it to let the yeast clean up diacetyl before you chill.'},
+      {n:'Crash',         d:2,  t:'34°F',        why:'Drop yeast and haze out of suspension.'},
+      {n:'Lagering',      d:28, t:'34°F',        why:'Where a lager actually becomes a lager. Do not shorten this.'}
+    ];
+  } else if(kveik){
+    steps=[
+      {n:'Primary',      d:3, t:F+'°F',      why:'Kveik ferments out in days, not weeks, and stays clean doing it.'},
+      {n:'Conditioning', d:2, t:F+'°F',      why:'Give it a couple of days to finish and settle.'},
+      {n:'Crash',        d:2, t:'34°F',      why:'Drop yeast and haze.'}
+    ];
+  } else if(wild){
+    steps=[
+      {n:'Primary',        d:14,  t:F+'°F', why:'Sacch takes the gravity down first.'},
+      {n:'Souring / Brett', d:150, t:F+'°F', why:'Acid and funk develop over months. Taste, do not schedule.'},
+      {n:'Crash',          d:3,   t:'34°F', why:'Only once it tastes finished.'}
+    ];
+  } else {
+    steps=[
+      {n:'Primary',      d:5, t:F+'°F',       why:'Bulk of attenuation. Let it free-rise a couple of degrees near the end.'},
+      {n:'Conditioning', d:3, t:(F+4)+'°F',   why:'Cleanup of diacetyl and acetaldehyde.'},
+      {n:'Crash',        d:2, t:'34°F',       why:'Drop yeast and haze.'}
+    ];
+  }
+  const days=steps.reduce((a,s)=>a+s.d,0);
+  const turn=2;                                        // days to empty, clean, refill
+  const turns=365/(days+turn);
+  return {lager:lager,kveik:kveik,wild:wild,steps:steps,days:days,
+    turnaround:turn,turnsPerYear:turns,temp:F,plan:fp};
+}
+
+/* ---- 7. CARBONATION ------------------------------------------------- */
+function kegPSI(vols,tempF){
+  return (vols+0.003342)/(0.01821+0.09011*Math.exp(-(tempF-32)/43.11))-14.695;
+}
+function residualCO2(tempF){ return 3.0378-0.050062*tempF+0.00026555*tempF*tempF; }
+function primingSugar(gal,target,maxFermTemp){
+  const res=residualCO2(maxFermTemp);
+  const need=Math.max(0,target-res);
+  return {res,need,corn:15.195*gal*need,table:15.195*gal*need*0.909,dme:15.195*gal*need*1.47};
+}
+
+/* ---- 8. REFRACTOMETER / HYDROMETER CORRECTION ----------------------- */
+function refracFG(ob,ab){
+  // Terrill cubic — refractometers read high once alcohol is present
+  return 1.001843-0.002318474*ob-0.000007775*ob*ob-0.000000034*ob*ob*ob
+        +0.00574*ab+0.00003344*ab*ab+0.000000086*ab*ab*ab;
+}
+function hydCorrect(sg,tF,calF){
+  const f=t=>1.00130346-0.000134722124*t+0.00000204052596*t*t-0.00000000232820948*t*t*t;
+  return sg*(f(tF)/f(calF||60));
+}
+
+/* ---- 9. EFFICIENCY BACK-CALCULATOR ---------------------------------- */
+function effFromMeasured(sgPre,volPre){
+  let max=0;
+  (R.fermentables||[]).forEach(f=>{ max+=f.ppg*f.lb; });
+  const got=(sgPre-1)*1000*volPre;
+  return {max,got,eff:max>0?got/max*100:0};
+}
+
+/* ================= BREWERY UI ================= */
+function money(v){ return '$'+(Math.abs(v)>=100?v.toFixed(0):v.toFixed(2)); }
+
+function renderBrewery(){
+  if(!BR) brLoad();
+  const sc=scaleRecipe(BR.scale), cost=costOf(sc), y=yieldOf(sc),
+        mg=marginOf(sc,cost,y), pitch=pitchRate(sc), sch=schedule();
+
+  /* scale selector */
+  const ss=$('brScale');
+  if(!ss.options.length){
+    Object.keys(SCALES).forEach(k=>ss.add(new Option(SCALES[k].n,k)));
+  }
+  ss.value=BR.scale;
+
+  /* custom batch controls */
+  const isCustom=BR.scale==='custom';
+  $('brCustomWrap').style.display=isCustom?'block':'none';
+  if(isCustom){
+    const fill=(id,v)=>{const el=$(id); if(document.activeElement!==el) el.value=v;};
+    fill('brCgal',BR.cGal); fill('brCeff',BR.cEff); fill('brCboil',BR.cBoil);
+    fill('brCloss',BR.cLoss); fill('brCpkg',BR.cPkg);
+    $('brCustHead').textContent=r2(sc.P.gal/BBL,2)+' BBL · '+r2(sc.P.gal/R.batch,2)+
+      '× the '+r2(R.batch,2)+' gal pilot batch';
+  }
+
+  /* --- scaled recipe --- */
+  $('brScaleHead').textContent=r2(sc.bbl,2)+' BBL · '+sc.P.eff+'% efficiency · '+
+    r2(sc.totalW,1)+' gal total water';
+  $('brGrist').innerHTML=sc.ferm.map(f=>{
+    const lb=f.lb, disp=lb>=100?r2(lb,0)+' lb':lb>=20?r2(lb,1)+' lb':r2(lb,2)+' lb';
+    const sacks=lb>=55?' <span class="hint">('+r2(lb/55,1)+' sacks)</span>':'';
+    return '<div class="hopbtn"><span>'+esc(f.n)+'</span><span style="font-family:var(--mono)">'+disp+sacks+'</span></div>';
+  }).join('')+
+    '<div class="hopbtn" style="border-bottom:none;font-weight:600;"><span>Total grist</span>'+
+    '<span style="font-family:var(--mono);color:var(--led)">'+r2(sc.grainLb,1)+' lb</span></div>';
+  $('brHops').innerHTML=sc.hops.map(hp=>
+    '<div class="hopbtn"><span>'+esc(hp.name)+' — '+(hp.use==='Whirlpool'?'whirlpool':hp.time+' min')+'</span>'+
+    '<span style="font-family:var(--mono)">'+(hp.oz>=16?r2(hp.oz/16,2)+' lb':r2(hp.oz,2)+' oz')+'</span></div>').join('');
+  $('brWater').innerHTML=
+    '<div class="hopbtn"><span>Pre-boil</span><span style="font-family:var(--mono)">'+r2(sc.preBoil,1)+' gal</span></div>'+
+    '<div class="hopbtn"><span>Boil-off ('+R.boilTime+' min)</span><span style="font-family:var(--mono)">'+r2(sc.boilOff,1)+' gal</span></div>'+
+    '<div class="hopbtn"><span>Grain absorption</span><span style="font-family:var(--mono)">'+r2(sc.absorb,1)+' gal</span></div>'+
+    '<div class="hopbtn" style="border-bottom:none;"><span>Into the fermenter</span><span style="font-family:var(--mono);color:var(--led)">'+r2(sc.P.gal,1)+' gal</span></div>';
+
+  /* --- cost --- */
+  const cr=(k,v,sub)=>'<div class="hopbtn"><span>'+k+(sub?' <span class="hint">'+sub+'</span>':'')+
+    '</span><span style="font-family:var(--mono)">'+money(v)+'</span></div>';
+  $('brCost').innerHTML=
+    cr('Grain',cost.grain,r2(sc.grainLb,1)+' lb')+
+    cr('Hops',cost.hop,r2(sc.hops.reduce((a,h)=>a+h.oz,0),1)+' oz')+
+    cr('Yeast',cost.yeast,pitch.packs+' × sachet')+
+    cr('Water, salts, misc',cost.misc)+
+    (cost.overhead?cr('Overhead',cost.overhead):'')+
+    '<div class="hopbtn" style="border-bottom:none;font-weight:600;"><span>Batch total</span>'+
+    '<span style="font-family:var(--mono);color:var(--led)">'+money(cost.total)+'</span></div>';
+  $('brCostUnit').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Per BBL</div><div class="v">'+money(cost.perBbl)+'</div></div>'+
+    '<div class="ro sm"><div class="k">Per gal sold</div><div class="v">'+money(cost.perGalSold)+'</div></div>'+
+    '<div class="ro sm"><div class="k">Per 12 oz</div><div class="v">'+money(cost.per12)+'</div></div></div>';
+
+  /* --- packaging --- */
+  $('brYield').innerHTML=Object.keys(PACKAGES).map(k=>{
+    const p=PACKAGES[k], v=y.out[k];
+    return '<div class="hopbtn"><span>'+p.n+'</span><span style="font-family:var(--mono)">'+
+      v.whole+' <span class="hint">('+r2(v.exact,1)+')</span></span></div>';
+  }).join('')+
+    '<div class="hint" style="margin-top:8px;">Assumes '+sc.P.pkgLoss+'% packaging loss — '+
+    r2(y.lost,1)+' gal never reaches a container.</div>';
+
+  /* --- margin --- */
+  const ps=$('brPkg');
+  if(!ps.options.length) Object.keys(PACKAGES).forEach(k=>ps.add(new Option(PACKAGES[k].n,k)));
+  ps.value=BR.pkg;
+  $('brPrice').value=BR.price;
+  $('brMargin').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Units</div><div class="v">'+r2(mg.units,1)+'</div></div>'+
+    '<div class="ro sm"><div class="k">Cost / unit</div><div class="v">'+money(mg.costPerUnit)+'</div></div>'+
+    '<div class="ro sm"><div class="k">Gross margin</div><div class="v" style="color:'+
+      (mg.pct>=50?'var(--ok)':mg.pct>=30?'var(--led)':'var(--warn)')+'">'+r2(mg.pct,0)+'<small>%</small></div></div></div>'+
+    '<div class="g3" style="margin-top:8px;"><div class="ro sm"><div class="k">Revenue</div><div class="v">'+money(mg.rev)+'</div></div>'+
+    '<div class="ro sm"><div class="k">Gross profit</div><div class="v">'+money(mg.gross)+'</div></div>'+
+    '<div class="ro sm"><div class="k">Break-even</div><div class="v">'+money(mg.be)+'</div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">Ingredients only. Labour, rent, utilities, '+
+    'excise tax, distribution and packaging materials are not in here — a healthy ingredient margin can still '+
+    'lose money once those land.</div>';
+
+  /* --- pitch --- */
+  $('brPitch').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Gravity</div><div class="v">'+r2(pitch.plato,1)+'<small>°P</small></div></div>'+
+    '<div class="ro sm"><div class="k">Cells needed</div><div class="v">'+r2(pitch.cells,0)+'<small>B</small></div></div>'+
+    '<div class="ro sm"><div class="k">Dry yeast</div><div class="v">'+r2(pitch.grams,0)+'<small>g</small></div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">'+pitch.note+' At '+pitch.rate+
+    ' million cells per mL per °P that is <b style="color:var(--led)">'+pitch.packs+
+    ' × 11.5 g sachets</b> of '+esc(R.yeastName)+'. '+pitch.warn+'</div>';
+
+  /* --- schedule --- */
+  const fp=sch.plan;
+  const fpWarn=fp.inRange?'':
+    '<div style="padding:8px 10px;margin-bottom:10px;border-radius:5px;'+
+    'background:rgba(200,120,40,.14);border:1px solid var(--warn);font-size:12px;line-height:1.55;">'+
+    '<b style="color:var(--warn)">Ferment temp is set to '+fp.set+'°F</b> — outside the '+
+    fp.Y.lo+'–'+fp.Y.hi+'°F range for '+esc(fp.Y.n)+'. The schedule below uses '+fp.temp+
+    '°F instead. Move the slider on the recipe page to make the two agree.</div>';
+  $('brSched').innerHTML=fpWarn+sch.steps.map(s=>
+    '<div style="padding:9px 0;border-bottom:1px solid var(--line);">'+
+    '<div style="display:flex;justify-content:space-between;"><span style="font-size:13px;">'+s.n+
+    '</span><span style="font-family:var(--mono);font-size:12px;color:var(--led)">'+s.d+' d @ '+s.t+'</span></div>'+
+    '<div class="hint" style="margin-top:3px;">'+s.why+'</div></div>').join('')+
+    '<div class="g3" style="margin-top:12px;"><div class="ro sm"><div class="k">Tank time</div><div class="v">'+
+    sch.days+'<small>days</small></div></div>'+
+    '<div class="ro sm"><div class="k">+ turnaround</div><div class="v">'+(sch.days+sch.turnaround)+'<small>days</small></div></div>'+
+    '<div class="ro sm"><div class="k">Turns / year</div><div class="v">'+r2(sch.turnsPerYear,1)+'</div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">One fermenter running this beer back to back yields '+
+    r2(sch.turnsPerYear*sc.bbl,0)+' BBL a year. '+(sch.lager?
+    'That long lagering window is why a lager flagship ties up capital an ale would not.':
+    sch.kveik?'Kveik turns a tank in under a week — the fastest schedule on this list by a wide margin.':
+    sch.wild?'A mixed-culture beer ties up a vessel for the better part of a year. Plan it as barrel or tote space, not tank space.':
+    'Ales turn tanks roughly three times as fast as lagers.')+'</div>';
+
+  /* --- carbonation --- */
+  $('brCo2').value=BR.co2; $('brServe').value=BR.serveTemp;
+  const psi=psiFor(+BR.co2,+BR.serveTemp,BR.alt==null?4165:+BR.alt);
+  const pr=primingSugar(sc.P.gal,+BR.co2,R.fermTemp);
+  $('brCarb').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Keg pressure</div><div class="v">'+r2(psi,1)+'<small>psi</small></div></div>'+
+    '<div class="ro sm"><div class="k">Residual CO₂</div><div class="v">'+r2(pr.res,2)+'<small>vol</small></div></div>'+
+    '<div class="ro sm"><div class="k">Priming sugar</div><div class="v">'+r2(pr.corn,0)+'<small>g</small></div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">Set the regulator to <b style="color:var(--led)">'+
+    r2(psi,1)+' psi</b> at '+BR.serveTemp+'°F and leave it — force carbonation is a waiting game, not a pressure game. '+
+    'Priming figure is corn sugar for the whole batch if you bottle instead.</div>';
+
+  /* --- tools --- */
+  const ob=parseFloat(BR.refracOB), ab=parseFloat(BR.refracAB);
+  $('brRefracOut').textContent=(isFinite(ob)&&isFinite(ab))
+    ? 'FG ≈ '+r2(refracFG(ob,ab),4)+'   ·   ABV ≈ '+r2((refracFG(ob,ab)?(1+ob/(258.6-ob/258.2*227.1)-refracFG(ob,ab))*131.25:0),2)+'%'
+    : 'Enter original and current Brix.';
+  const hs=parseFloat(BR.hydSG), ht=parseFloat(BR.hydT);
+  $('brHydOut').textContent=(isFinite(hs)&&isFinite(ht))
+    ? 'Corrected to 60°F: '+r2(hydCorrect(hs,ht,60),4)
+    : 'Enter reading and sample temperature.';
+  const mp=parseFloat(BR.measPre), mv=parseFloat(BR.measVol);
+  if(isFinite(mp)&&isFinite(mv)&&mv>0){
+    const e=effFromMeasured(mp,mv);
+    $('brEffOut').innerHTML='Actual efficiency <b style="color:'+
+      (Math.abs(e.eff-R.efficiency)<3?'var(--ok)':'var(--warn)')+'">'+r2(e.eff,1)+'%</b> '+
+      '<span class="hint">(recipe assumes '+R.efficiency+'%)</span>';
+  } else $('brEffOut').textContent='Enter measured pre-boil gravity and volume.';
+}
+
+/* ---- 10. BREW SHEET EXPORT ---- */
+function brewSheetHTML(){
+  if(!BR) brLoad();
+  const sc=scaleRecipe(BR.scale), cost=costOf(sc), y=yieldOf(sc),
+        pitch=pitchRate(sc), sch=schedule(), o=computeAll(), fp=fermPlan();
+  const s=solveSalts(R.water,sc.totalW);   // scale salts to the selected brewhouse, not the pilot
+  const row=(a,b)=>'<tr><td>'+a+'</td><td class="n">'+b+'</td></tr>';
+  const html='<!doctype html><meta charset="utf-8"><title>'+esc(R.name)+' — brew sheet</title>'+
+  '<style>body{font:13px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:32px auto;padding:0 20px;color:#111}'+
+  'h1{font-size:22px;margin:0 0 2px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#666;'+
+  'margin:26px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}table{width:100%;border-collapse:collapse}'+
+  'td{padding:4px 0;border-bottom:1px solid #eee}td.n{text-align:right;font-variant-numeric:tabular-nums}'+
+  '.sub{color:#666;margin:0 0 4px}.box{display:flex;gap:22px;flex-wrap:wrap;margin:10px 0}'+
+  '.box div{font-size:12px}.box b{display:block;font-size:17px}ol{padding-left:18px}li{margin:5px 0}'+
+  '@media print{@page{margin:14mm}body{margin:0;max-width:none;padding:0;font-size:11.5pt}'+
+  'h2{break-after:avoid;page-break-after:avoid}table,ol{break-inside:avoid;page-break-inside:avoid}'+
+  'tr{break-inside:avoid;page-break-inside:avoid}.box{break-inside:avoid}}</style>'+
+  '<h1>'+esc(R.name)+'</h1><p class="sub">'+esc(R.style)+' · '+scaleDef(BR.scale).n+' · '+
+  new Date().toLocaleDateString()+'</p>'+
+  '<div class="box"><div>OG<b>'+r2(o.og,3)+'</b></div><div>FG<b>'+r2(o.fg,3)+'</b></div>'+
+  '<div>ABV<b>'+r2(o.abv,2)+'%</b></div><div>IBU<b>'+r2(o.ibu,1)+'</b></div>'+
+  '<div>SRM<b>'+r2(o.srm,1)+'</b></div><div>Batch<b>'+r2(sc.P.gal,1)+' gal</b></div>'+
+  '<div>Yeast<b>'+esc(fp.Y.n)+'</b></div></div>'+
+  '<h2>Grist — '+r2(sc.grainLb,1)+' lb</h2><table>'+
+  sc.ferm.map(f=>row(esc(f.n),(f.lb>=10?r2(f.lb,1):r2(f.lb,2))+' lb')).join('')+'</table>'+
+  '<h2>Hops</h2><table>'+
+  sc.hops.map(h=>row(esc(h.name)+' — '+(h.use==='Whirlpool'?'whirlpool':h.time+' min'),
+    (h.oz>=16?r2(h.oz/16,2)+' lb':r2(h.oz,2)+' oz'))).join('')+'</table>'+
+  '<h2>Water</h2><table>'+
+  row('Total','' +r2(sc.totalW,1)+' gal')+row('Pre-boil',r2(sc.preBoil,1)+' gal')+
+  row('Boil-off',r2(sc.boilOff,1)+' gal')+row('Into fermenter',r2(sc.P.gal,1)+' gal')+
+  row('Target profile','Ca '+R.water.ca+' · Mg '+R.water.mg+' · Na '+R.water.na+
+    ' · SO₄ '+R.water.so4+' · Cl '+R.water.cl+' · HCO₃ '+R.water.hco3)+'</table>'+
+  (s?'<h2>Salt additions — building '+r2(sc.totalW,1)+' gal from RO</h2><table>'+
+    Object.keys(SALTS).filter(k=>s.g[k]>0.05).map(k=>row(SALTS[k].n,
+      s.g[k]>=1000?r2(s.g[k]/1000,2)+' kg':r2(s.g[k],1)+' g')).join('')+'</table>':'')+
+  '<h2>Yeast</h2><table>'+
+  row('Strain',esc(fp.Y.n))+
+  row('Type',esc(fp.Y.g||(fp.Y.lager?'Lager':'Ale')))+
+  row('Character',esc(fp.Y.note))+
+  row('Attenuation',fp.Y.att+'% apparent — '+r2(o.effAtt,1)+'% at a '+R.mashTemp+'°F mash')+
+  row('Strain range',fp.Y.lo+'–'+fp.Y.hi+'°F')+
+  row('Pitch',pitch.packs+' × 11.5 g sachet ('+r2(pitch.grams,0)+' g dry, '+
+    r2(pitch.cells,0)+' B cells at '+pitch.rate+' M/mL/°P)')+
+  row('Ferment at','<b>'+fp.temp+'°F</b>'+(fp.inRange?'':
+    ' — recipe says '+fp.set+'°F, which is outside this strain\u2019s range'))+'</table>'+
+  '<h2>Fermentation — '+sch.days+' days tank time</h2><table>'+
+  sch.steps.map(x=>row(x.n+' <span style="color:#888">'+x.why+'</span>',
+    x.d+' d @ '+x.t)).join('')+'</table>'+
+  '<h2>Process</h2><ol>'+
+  '<li>Mash at <b>'+R.mashTemp+'°F</b> for '+R.mashTime+' min, '+r2(R.mashThickness,2)+' qt/lb.</li>'+
+  '<li>Boil '+R.boilTime+' min. Water boils at '+r2(boilPoint(4165),0)+'°F at 4,165 ft — do not shorten it.</li>'+
+  '<li>Chill to '+fp.temp+'°F, oxygenate, pitch <b>'+pitch.packs+
+    ' sachets of '+esc(fp.Y.n)+'</b> ('+r2(pitch.grams,0)+' g, '+r2(pitch.cells,0)+' B cells).</li>'+
+  '<li>Hold the fermentation schedule above — '+sch.days+' days total before packaging.</li>'+
+  '<li>Carbonate to '+BR.co2+' vol — '+r2(psiFor(+BR.co2,+BR.serveTemp,BR.alt==null?4165:+BR.alt),1)+
+    ' psi at '+BR.serveTemp+'°F (corrected for '+r2(BR.alt==null?4165:+BR.alt,0)+' ft).</li>'+
+  '</ol>'+
+  '<h2>Mash temp log</h2>'+
+  (function(){
+    const L=mashLog().slice().sort((a,b)=>a.m-b.m), st=mashLogStats();
+    let h='<table><tr><td><b>Elapsed</b></td><td class="n"><b>Temp °F</b></td>'+
+          '<td class="n"><b>vs '+R.mashTemp+'°F</b></td></tr>';
+    if(L.length){
+      L.forEach(x=>{const d=x.f-R.mashTemp;
+        h+='<tr><td>'+x.m+' min</td><td class="n">'+r2(x.f,1)+'</td>'+
+           '<td class="n">'+(d>=0?'+':'')+r2(d,1)+'</td></tr>';});
+    }
+    const blanks=Math.max(0,(L.length?2:Math.ceil(R.mashTime/10)+1));
+    for(let i=0;i<blanks;i++){
+      const at=L.length?'________':(i*10)+' min';
+      h+='<tr><td>'+at+'</td><td class="n">________</td><td class="n">________</td></tr>';}
+    h+='<tr><td><b>Average</b></td><td class="n"><b>'+(st?r2(st.avg,1):'________')+
+       '</b></td><td class="n"><b>'+(st?((st.drift>=0?'+':'')+r2(st.drift,1)):'________')+
+       '</b></td></tr></table>';
+    if(st) h+='<p class="sub">'+st.n+' readings · low '+r2(st.min,1)+' · high '+r2(st.max,1)+
+      ' · spread '+r2(st.spread,1)+'°F. Effective attenuation at the logged average is '+
+      r2(effAttFor(st.avg),1)+'%.</p>';
+    else h+='<p class="sub">Log the probe sitting in the grain bed — coil-output readings '+
+      'track the HERMS return, not the mash. Average these at the end and enter it back in the sim.</p>';
+    return h;})()+
+  '<h2>Yield &amp; cost</h2><table>'+
+  row('Into package',r2(y.sold,1)+' gal after '+sc.P.pkgLoss+'% loss')+
+  row('½ BBL kegs',y.out.half.whole)+row('⅙ BBL sixtels',y.out.sixth.whole)+
+  row('Cases 24×12 oz',y.out.c12.whole)+
+  row('Ingredient cost',money(cost.total)+'  ('+money(cost.perBbl)+'/BBL)')+'</table>'+
+  '<h2>Measured</h2><table>'+row('Strike temp','________')+row('Mash in','________')+
+  row('Mash avg (from log)','________')+row('Mash pH','________')+
+  row('Pre-boil gravity','________')+row('OG','________')+row('FG','________')+
+  row('Package date','________')+'</table>';
+  return {html:html, slug:(R.name||'recipe').replace(/[^\w\-]+/g,'-').toLowerCase()+
+    '-'+r2(sc.P.gal,1).replace('.','_')+'gal-brew-sheet'};
+}
+
+function brewSheet(){
+  const s=brewSheetHTML();
+  const blob=new Blob([s.html],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=s.slug+'.html';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},2000);
+  flash('Brew sheet downloaded');
+}
+
+/* Print straight to paper/PDF. A hidden iframe beats window.open here — no popup
+   blocker, and iOS Safari will not print a blob: window. */
+function printSheet(){
+  const s=brewSheetHTML();
+  const old=document.getElementById('printFrame'); if(old) old.remove();
+  const f=document.createElement('iframe');
+  f.id='printFrame';
+  f.setAttribute('aria-hidden','true');
+  f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(f);
+  f.onload=()=>{
+    try{
+      const w=f.contentWindow;
+      w.focus(); w.print();
+      flash('Sent to print');
+    }catch(err){
+      flash('Print blocked — use Brew sheet instead');
+    }
+    setTimeout(()=>{const el=document.getElementById('printFrame'); if(el) el.remove();},60000);
+  };
+  f.srcdoc=s.html;
+}
+
+
+/* ---- brewery wiring ---- */
+function brPriceRows(){
+  const box=$('brPriceRows'); if(!box) return;
+  const seen={};
+  const rows=(R.fermentables||[]).filter(f=>{if(seen[f.n])return false;seen[f.n]=1;return true;}).map(f=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;">'+
+    '<span style="font-size:12px;flex:1;">'+esc(f.n)+'</span>'+
+    '<input type="number" step="0.05" style="width:88px;" data-price="'+esc(f.n)+'" value="'+priceFor(f)+'">'+
+    '<span class="hint">$/lb</span></div>').join('');
+  const hs={};
+  const hrows=(R.hops||[]).filter(h=>{if(hs[h.name])return false;hs[h.name]=1;return true;}).map(h=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;">'+
+    '<span style="font-size:12px;flex:1;">'+esc(h.name)+'</span>'+
+    '<input type="number" step="0.25" style="width:88px;" data-hprice="'+esc(h.name)+'" value="'+hopPriceFor(h.name)+'">'+
+    '<span class="hint">$/oz</span></div>').join('');
+  box.innerHTML=rows+hrows;
+}
+function brBind(){
+  if(!BR) brLoad();
+  $('brYeastCost').value=BR.yeastCost; $('brMisc').value=BR.miscGal; $('brOverhead').value=BR.overhead;
+  $('brROB').value=BR.refracOB; $('brRAB').value=BR.refracAB;
+  $('brHSG').value=BR.hydSG; $('brHT').value=BR.hydT;
+  $('brMP').value=BR.measPre; $('brMV').value=BR.measVol;
+  brPriceRows();
+}
+function brUp(){ brSave(); renderBrewery(); }
+$('mShop').addEventListener('click',()=>{
+  document.body.classList.remove('session','carb'); document.body.classList.add('brewery');
+  $('mShop').classList.add('on'); $('mCarb').classList.remove('on'); $('mBrew').classList.remove('on'); $('mDesign').classList.remove('on');
+  setSpeed(0); brBind(); renderBrewery();
+});
+$('brScale').addEventListener('change',e=>{
+  if(!BR) brLoad();
+  BR.scale=e.target.value;
+  /* first time into custom, seed it from the preset they were just on */
+  if(BR.scale==='custom'&&!BR.cSeeded){
+    const prev=SCALES[e.target.dataset.prev||'pilot']||SCALES.pilot;
+    BR.cGal=prev.gal; BR.cEff=prev.eff;
+    BR.cBoil=prev.boilPctHr!=null?prev.boilPctHr:8.0;
+    BR.cLoss=prev.loss; BR.cPkg=prev.pkgLoss; BR.cSeeded=true;
+  }
+  e.target.dataset.prev=BR.scale;
+  brUp();
+});
+[['brCgal','cGal'],['brCeff','cEff'],['brCboil','cBoil'],['brCloss','cLoss'],['brCpkg','cPkg']]
+  .forEach(function(p){
+    $(p[0]).addEventListener('input',function(e){
+      if(!BR) brLoad();
+      const v=parseFloat(e.target.value);
+      BR[p[1]]=isNaN(v)?BR[p[1]]:v;
+      brUp();
+    });
+  });
+$('brPkg').addEventListener('change',e=>{ BR.pkg=e.target.value; brUp(); });
+[['brPrice','price'],['brCo2','co2'],['brServe','serveTemp'],['brYeastCost','yeastCost'],
+ ['brMisc','miscGal'],['brOverhead','overhead']].forEach(([id,k])=>{
+  $(id).addEventListener('input',e=>{ BR[k]=+e.target.value||0; brUp(); });
+});
+[['brROB','refracOB'],['brRAB','refracAB'],['brHSG','hydSG'],['brHT','hydT'],
+ ['brMP','measPre'],['brMV','measVol']].forEach(([id,k])=>{
+  $(id).addEventListener('input',e=>{ BR[k]=e.target.value; brUp(); });
+});
+$('brPriceRows').addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.price!=null) BR.prices[t.dataset.price]=+t.value||0;
+  if(t.dataset.hprice!=null) BR.hopPrice[t.dataset.hprice]=+t.value||0;
+  brSave(); renderBrewery();
+});
+$('brSheet').addEventListener('click',brewSheet);
+$('brPrint').addEventListener('click',printSheet);
+
+/* ================= CARBONATION ================= */
+/* Henry's law acts on ABSOLUTE pressure. A regulator gauge reads relative to local
+   atmosphere, and every published carbonation chart assumes sea level. At altitude
+   the same gauge reading is a lower absolute pressure, so the beer carbonates less. */
+function atmAt(ft){ return 14.696*Math.pow(1-2.25577e-5*(ft*0.3048),5.25588); }
+function henry(tempF){ return 0.01821+0.09011*Math.exp(-(tempF-32)/43.11); }
+function psiFor(vols,tempF,altFt){ return (vols+0.003342)/henry(tempF)-atmAt(altFt); }
+function volsFor(psi,tempF,altFt){ return (psi+atmAt(altFt))*henry(tempF)-0.003342; }
+
+const CO2_STYLES=[
+  ['British cask ale',1.5,2.0],['Irish stout (nitro)',1.2,1.4],
+  ['American amber / lager',2.4,2.6],['American pale / IPA',2.2,2.7],
+  ['Pilsner',2.4,2.7],['Kölsch',2.4,2.7],['Hefeweizen',3.3,4.5],
+  ['Belgian ale',2.4,3.0],['Saison',2.9,3.5],['Fruit / seltzer',2.8,3.4]
+];
+const LINES=[
+  {n:'3/16" ID vinyl',      r:3.00},
+  {n:'1/4" ID vinyl',       r:0.85},
+  {n:'5/16" ID vinyl',      r:0.40},
+  {n:'3/8" ID vinyl',       r:0.20},
+  {n:'3/16" ID barrier',    r:2.20},
+  {n:'1/4" ID barrier',     r:0.70}
+];
+const SUGARS=[
+  {n:'Corn sugar (dextrose)',f:1.000},
+  {n:'Table sugar (sucrose)',f:0.909},
+  {n:'Dry malt extract',     f:1.470},
+  {n:'Honey',                f:1.090},
+  {n:'Maple syrup',          f:1.160}
+];
+
+function lineLength(psi,restrict,riseFt){
+  return Math.max(0,(psi-1-0.5*riseFt)/restrict);
+}
+/* CO2 mass: what dissolves into the beer, plus what fills the headspace as it empties */
+function co2Usage(gal,vols,psi,altFt){
+  const A=atmAt(altFt), GPL=1.977, L=3.785;
+  const carb=gal*vols*L*GPL/453.6;
+  const disp=gal*((psi+A)/A)*L*GPL/453.6;
+  return {carb,disp,total:carb+disp};
+}
+function primeSugar(gal,target,maxTemp,factor){
+  const res=residualCO2(maxTemp), need=Math.max(0,target-res);
+  return {res,need,grams:15.195*gal*need*factor,oz:15.195*gal*need*factor/28.35};
+}
+
+function renderCarb(){
+  if(!BR) brLoad();
+  if(BR.alt==null) BR.alt=4165;
+  if(BR.riseFt==null) BR.riseFt=2;
+  if(BR.lineIdx==null) BR.lineIdx=0;
+  if(BR.sugarIdx==null) BR.sugarIdx=0;
+  if(BR.tankLb==null) BR.tankLb=5;
+  if(BR.kegGal==null) BR.kegGal=15.5;
+
+  const V=+BR.co2, T=+BR.serveTemp, A=+BR.alt;
+  const psi=psiFor(V,T,A), psiSea=psiFor(V,T,0), atm=atmAt(A);
+
+  $('cbVols').value=V; $('cbTemp').value=T; $('cbAlt').value=A;
+  $('cbBig').innerHTML=r2(psi,1)+'<small style="font-size:20px;"> psi</small>';
+  $('cbSub').innerHTML='to hold <b>'+r2(V,2)+' volumes</b> at '+r2(T,0)+'°F';
+
+  const diff=psi-psiSea;
+  $('cbAltNote').innerHTML= Math.abs(diff)<0.3
+    ? 'Local atmospheric pressure is '+r2(atm,1)+' psi — essentially sea level, so a published chart is fine.'
+    : 'Local atmospheric pressure is <b>'+r2(atm,1)+' psi</b>, not 14.7. Charts assume sea level, so they would tell '+
+      'you <b>'+r2(psiSea,1)+' psi</b>. Set that here and you get only <b style="color:var(--warn)">'+
+      r2(volsFor(psiSea,T,A),2)+' volumes</b> instead of '+r2(V,2)+'. You need <b style="color:var(--led)">'+
+      r2(diff,1)+' psi more</b> than the chart says.';
+
+  /* --- chart --- */
+  const temps=[],vs=[];
+  for(let t=32;t<=58;t+=2) temps.push(t);
+  for(let v=2.0;v<=3.001;v+=0.1) vs.push(+v.toFixed(1));
+  let html='<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;">'+
+    '<tr><th style="text-align:left;padding:4px 6px;color:var(--dim);font-weight:400;">°F</th>'+
+    vs.map(v=>'<th style="padding:4px 3px;color:var(--dim);font-weight:400;">'+v.toFixed(1)+'</th>').join('')+'</tr>';
+  const nearT=temps.reduce((a,b)=>Math.abs(b-T)<Math.abs(a-T)?b:a);
+  const nearV=vs.reduce((a,b)=>Math.abs(b-V)<Math.abs(a-V)?b:a);
+  temps.forEach(t=>{
+    html+='<tr><td style="padding:3px 6px;color:var(--dim);">'+t+'</td>';
+    vs.forEach(v=>{
+      const p=psiFor(v,t,A), hit=(t===nearT&&v===nearV);
+      html+='<td style="padding:3px 3px;text-align:center;'+
+        (hit?'background:var(--copper);color:#14100C;font-weight:700;border-radius:3px;':
+             'color:'+(p<5?'var(--dim)':p>30?'var(--warn)':'var(--text)')+';')+'">'+
+        (p<0?'—':r2(p,0))+'</td>';
+    });
+    html+='</tr>';
+  });
+  $('cbChart').innerHTML=html+'</table>';
+  $('cbChartNote').textContent='Gauge pressure in psi, corrected for '+r2(A,0)+' ft. '+
+    'Highlighted cell is your current target.';
+
+  /* --- drift --- */
+  const warm=T+12;
+  $('cbDrift').innerHTML='If the keg drifts to '+r2(warm,0)+'°F and the regulator stays at '+r2(psi,1)+
+    ' psi, the beer settles to <b style="color:var(--warn)">'+r2(volsFor(psi,warm,A),2)+' volumes</b> — '+
+    'it goes flat and pours foamy at the same time, because warm beer holds less gas but releases it faster. '+
+    'Carbonation is a temperature problem before it is a pressure problem.';
+
+  /* --- styles --- */
+  $('cbStyles').innerHTML=CO2_STYLES.map(s=>{
+    const inRange=V>=s[1]&&V<=s[2];
+    return '<div class="hopbtn"><span'+(inRange?' style="color:var(--led)"':'')+'>'+s[0]+'</span>'+
+      '<span style="font-family:var(--mono)">'+s[1].toFixed(1)+'–'+s[2].toFixed(1)+
+      '<span class="hint"> vol</span></span></div>';
+  }).join('');
+
+  /* --- methods --- */
+  const burst=Math.min(35,psi*2.4);
+  $('cbMethods').innerHTML=
+    '<div style="padding:9px 0;border-bottom:1px solid var(--line);">'+
+    '<div style="display:flex;justify-content:space-between;"><span style="font-size:13px;">Set and forget</span>'+
+    '<span style="font-family:var(--mono);font-size:12px;color:var(--led)">'+r2(psi,1)+' psi · 7–14 days</span></div>'+
+    '<div class="hint" style="margin-top:3px;">Hook it up at serving pressure and walk away. Nothing to get wrong, '+
+    'and the beer is ready to pour the moment it is carbonated.</div></div>'+
+    '<div style="padding:9px 0;border-bottom:1px solid var(--line);">'+
+    '<div style="display:flex;justify-content:space-between;"><span style="font-size:13px;">Burst</span>'+
+    '<span style="font-family:var(--mono);font-size:12px;color:var(--led)">'+r2(burst,0)+' psi · 24–36 h</span></div>'+
+    '<div class="hint" style="margin-top:3px;">Then drop to '+r2(psi,1)+' psi and let it equalise for a day. '+
+    'Faster, but overshoot is hard to undo — you have to vent and wait.</div></div>'+
+    '<div style="padding:9px 0;">'+
+    '<div style="display:flex;justify-content:space-between;"><span style="font-size:13px;">Shaking</span>'+
+    '<span style="font-family:var(--mono);font-size:12px;color:var(--warn)">not for packaged beer</span></div>'+
+    '<div class="hint" style="margin-top:3px;">Fine for a corny you are drinking tonight. For anything you sell, '+
+    'the agitation drives oxygen pickup and you cannot measure where you landed.</div></div>';
+
+  /* --- line balancing --- */
+  const ls=$('cbLine');
+  if(!ls.options.length) LINES.forEach((l,i)=>ls.add(new Option(l.n,i)));
+  ls.value=BR.lineIdx; $('cbRise').value=BR.riseFt;
+  const L=LINES[BR.lineIdx], len=lineLength(psi,L.r,+BR.riseFt);
+  $('cbLineOut').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Line length</div><div class="v">'+r2(len,1)+'<small>ft</small></div></div>'+
+    '<div class="ro sm"><div class="k">Restriction</div><div class="v">'+r2(L.r,2)+'<small>psi/ft</small></div></div>'+
+    '<div class="ro sm"><div class="k">Rise loss</div><div class="v">'+r2(0.5*BR.riseFt,1)+'<small>psi</small></div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">Cut '+r2(len,1)+' ft of '+L.n+
+    '. Too short and it pours foam; too long and it pours slow. '+
+    (len<2?'<span style="color:var(--warn)">Under 2 ft is impractical — move to a narrower line.</span>':
+     len>25?'<span style="color:var(--warn)">Over 25 ft is unwieldy — move to a wider line.</span>':
+     'Aim for a pour of roughly one pint in 10–12 seconds.')+'</div>';
+
+  /* --- CO2 tank --- */
+  $('cbKegGal').value=BR.kegGal; $('cbTank').value=BR.tankLb;
+  const u=co2Usage(+BR.kegGal,V,psi,A);
+  $('cbTankOut').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Absorbed</div><div class="v">'+r2(u.carb,2)+'<small>lb</small></div></div>'+
+    '<div class="ro sm"><div class="k">Dispensing</div><div class="v">'+r2(u.disp,2)+'<small>lb</small></div></div>'+
+    '<div class="ro sm"><div class="k">Per keg</div><div class="v">'+r2(u.total,2)+'<small>lb</small></div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">A '+r2(BR.tankLb,0)+' lb cylinder covers about '+
+    '<b style="color:var(--led)">'+r2(BR.tankLb/u.total,1)+' kegs</b> of this size. '+
+    'Thin air works in your favour here — less atmospheric back-pressure means slightly less gas per pour.</div>';
+
+  /* --- priming --- */
+  const ss=$('cbSugar');
+  if(!ss.options.length) SUGARS.forEach((s,i)=>ss.add(new Option(s.n,i)));
+  ss.value=BR.sugarIdx;
+  const sc=scaleRecipe(BR.scale);
+  const pr=primeSugar(sc.P.gal,V,R.fermTemp,SUGARS[BR.sugarIdx].f);
+  $('cbPrime').innerHTML=
+    '<div class="g3"><div class="ro sm"><div class="k">Residual CO₂</div><div class="v">'+r2(pr.res,2)+'<small>vol</small></div></div>'+
+    '<div class="ro sm"><div class="k">Needed</div><div class="v">'+r2(pr.need,2)+'<small>vol</small></div></div>'+
+    '<div class="ro sm"><div class="k">Sugar</div><div class="v">'+
+      (pr.grams>=1000?r2(pr.grams/1000,2)+'<small>kg</small>':r2(pr.grams,0)+'<small>g</small>')+'</div></div></div>'+
+    '<div class="hint" style="margin-top:10px;line-height:1.6;">For '+r2(sc.P.gal,1)+' gal. Residual CO₂ comes from '+
+    'your fermentation temperature ('+R.fermTemp+'°F) — beer already holds gas before you add any sugar, and '+
+    'ignoring that is how bottles turn into grenades. Priming is for bottle conditioning; kegs get gas.</div>';
+}
+
+
+/* ---- carbonation wiring ---- */
+$('mCarb').addEventListener('click',()=>{
+  document.body.classList.remove('session','brewery');
+  document.body.classList.add('carb');
+  $('mCarb').classList.add('on');
+  ['mDesign','mBrew','mShop'].forEach(i=>$(i).classList.remove('on'));
+  setSpeed(0); if(!BR) brLoad(); renderCarb();
+});
+[['cbVols','co2'],['cbTemp','serveTemp'],['cbAlt','alt'],['cbRise','riseFt'],
+ ['cbKegGal','kegGal'],['cbTank','tankLb']].forEach(([id,k])=>{
+  $(id).addEventListener('input',e=>{ BR[k]=+e.target.value||0; brSave(); renderCarb(); });
+});
+[['cbLine','lineIdx'],['cbSugar','sugarIdx']].forEach(([id,k])=>{
+  $(id).addEventListener('change',e=>{ BR[k]=+e.target.value; brSave(); renderCarb(); });
+});
+
+/* ================= BOOT ================= */
+renderFermRows(); renderHopRows(); syncControls(); updWaterHints(); refreshOpen(); render();
+
+/* ================= 11. RECIPE FILES, INSTALL, OFFLINE ================= */
+
+/* ---- recipe files on disk ----
+   Chrome/Edge on Windows get real Save As / Open dialogs. Everything else
+   (iPhone, Safari, Firefox) falls back to download + file picker, which puts
+   the file in Downloads/Files instead of a folder you choose. Same .json
+   either way, so a recipe saved on the laptop opens on the phone. */
+
+const FILE_KIND = 'brewsim-recipe';
+
+function recipeFileName(){
+  return (R.name||'recipe').replace(/[^\w\-]+/g,'-').toLowerCase()+'.json';
+}
+
+function recipePayload(){
+  return JSON.stringify({
+    kind: FILE_KIND,
+    version: 1,
+    savedAt: new Date().toISOString(),
+    app: 'Brewhouse Simulator',
+    recipe: JSON.parse(JSON.stringify(R))
+  }, null, 2);
+}
+
+function downloadText(text, name, mime){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:mime||'application/json'}));
+  a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},2000);
+}
+
+async function saveRecipeToFile(){
+  const text=recipePayload(), name=recipeFileName();
+  if(window.showSaveFilePicker){
+    try{
+      const h=await window.showSaveFilePicker({
+        suggestedName:name,
+        types:[{description:'Brewhouse recipe', accept:{'application/json':['.json']}}]
+      });
+      const w=await h.createWritable();
+      await w.write(text); await w.close();
+      flash('Saved to '+h.name);
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError') return;   // user closed the dialog
+      /* fall through to download */
+    }
+  }
+  downloadText(text,name);
+  flash('Saved '+name);
+}
+
+function applyRecipeObject(obj,label){
+  const r=(obj && obj.recipe) ? obj.recipe : obj;
+  if(!r || typeof r!=='object' || !Array.isArray(r.fermentables)){
+    flash('Not a recipe file'); return false;
+  }
+  R=Object.assign(defaultRecipe(),r);
+  renderFermRows(); renderHopRows(); syncControls(); updWaterHints(); render();
+  flash('Opened “'+(R.name||label||'recipe')+'”');
+  return true;
+}
+
+function readRecipeFile(file){
+  if(!file) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{ applyRecipeObject(JSON.parse(fr.result), file.name); }
+    catch(err){ flash('Could not read that file'); }
+  };
+  fr.onerror=()=>flash('Could not read that file');
+  fr.readAsText(file);
+}
+
+async function openRecipeFromFile(){
+  if(window.showOpenFilePicker){
+    try{
+      const [h]=await window.showOpenFilePicker({
+        types:[{description:'Brewhouse recipe', accept:{'application/json':['.json']}}],
+        multiple:false
+      });
+      readRecipeFile(await h.getFile());
+      return;
+    }catch(err){
+      if(err && err.name==='AbortError') return;
+      /* fall through to the plain input */
+    }
+  }
+  $('fileIn').click();
+}
+
+$('btnToFile').addEventListener('click',saveRecipeToFile);
+$('btnFromFile').addEventListener('click',openRecipeFromFile);
+$('fileIn').addEventListener('change',e=>{
+  readRecipeFile(e.target.files && e.target.files[0]);
+  e.target.value='';   // so re-opening the same file fires again
+});
+
+/* Drag a recipe file onto the window to open it. */
+window.addEventListener('dragover',e=>{ e.preventDefault(); });
+window.addEventListener('drop',e=>{
+  const f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f && /\.json$/i.test(f.name)){ e.preventDefault(); readRecipeFile(f); }
+});
+
+/* Ctrl/Cmd+S saves to file, Ctrl/Cmd+P prints the sheet. */
+window.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey) || e.altKey) return;
+  const k=e.key.toLowerCase();
+  if(k==='s'){ e.preventDefault(); saveRecipeToFile(); }
+  else if(k==='p'){ e.preventDefault(); printSheet(); }
+});
+
+/* ---- install ---- */
+const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+                     window.navigator.standalone===true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+              (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+let deferredPrompt=null;
+
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); deferredPrompt=e;
+  $('btnInstall').style.display='';
+});
+
+window.addEventListener('appinstalled',()=>{
+  deferredPrompt=null;
+  $('btnInstall').style.display='none';
+  flash('Installed');
+});
+
+$('btnInstall').addEventListener('click',async()=>{
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    const {outcome}=await deferredPrompt.userChoice;
+    deferredPrompt=null;
+    if(outcome!=='accepted') $('btnInstall').style.display='';
+    return;
+  }
+  flash('Share menu → Add to Home Screen');
+});
+
+/* iOS never fires beforeinstallprompt — surface the button anyway so the
+   Share → Add to Home Screen hint is reachable. */
+if(isIOS && !isStandalone) $('btnInstall').style.display='';
+
+/* ---- offline ---- */
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+  let reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(reloading) return; reloading=true; location.reload();
+  });
+}
+
+</script>
+</body>
+</html>
